@@ -1,6 +1,8 @@
 # 音の棚 — iPhone用音楽プレーヤー
 
-SwiftUI / AVAudioPlayer、iOS 17以降向けの初版ソースです。Windows上で作成しており、Xcodeによるコンパイル・実機検証はまだ実施していません。インストール可能なIPAはまだありません。
+SwiftUI / AVAudioPlayer、iOS 17以降向けの初版です。GitHubのmacOS環境でiPhone向けReleaseビルドとPC・Swift両方の歌詞形式チェックが成功し、未署名IPAを生成しました。iPhone実機での導入・再生確認はまだ実施していません。IPAはAltStore Classicなどで署名してからインストールします。
+
+ビルド結果: https://github.com/tokage0523/otonotana/actions/runs/38122530311
 
 ## 現在の実装
 
@@ -38,7 +40,7 @@ SwiftUI / AVAudioPlayer、iOS 17以降向けの初版ソースです。Windows�
 
 ## Windowsから無料で導入する候補
 
-クラウドビルドとAltStore Classicによる署名・導入の構成ファイルを用意しています。この手順はまだ実行しておらず、iPhone 15 Pro / iOS 26.6.1でのインストールは未検証です。
+クラウドビルドとIPAの生成は成功しました。AltStore Classicによる署名・導入、およびiPhone 15 Pro / iOS 26.6.1での動作は未検証です。
 
 1. GitHubに公開リポジトリを用意し、このM4APlayerフォルダーの**中身**をルートに配置する。`.github/workflows/build-ios.yml` も含める。音楽や歌詞、Appleアカウントの情報はアップロード不要。
 2. mainブランチへのコード追加・更新でビルドが開始する。Actions → Build iPhone app → Run workflowから手動でも実行できる。公開リポジトリの標準macOSランナーは無料。非公開リポジトリでは実行をスキップする設定で、ストアへの配信は行わない。
