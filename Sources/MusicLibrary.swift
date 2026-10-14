@@ -5,11 +5,20 @@ import Foundation
 import UIKit
 
 @MainActor
+final class PlaybackClock: ObservableObject {
+    @Published var position: Double = 0
+}
+
+@MainActor
 final class MusicLibrary: NSObject, ObservableObject, AVAudioPlayerDelegate {
     @Published private(set) var tracks: [Track] = []
     @Published private(set) var current: Track?
     @Published private(set) var playing = false
-    @Published private(set) var position: Double = 0
+    let clock = PlaybackClock()
+    private(set) var position: Double {
+        get { clock.position }
+        set { clock.position = newValue }
+    }
     @Published private(set) var duration: Double = 0
     @Published private(set) var importing = false
     @Published var message: String?

@@ -17,8 +17,6 @@ struct PlayerView: View {
     @State private var showPhotos = false
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var photoLoading = false
-    @State private var scrubPosition = 0.0
-    @State private var scrubbing = false
 
     private var theme: PlayerTheme { PlayerTheme(rawValue: themeName) ?? .artwork }
     private var palette: PlayerPalette { PlayerPalette(theme: theme, tint: library.artworkTint) }
@@ -33,13 +31,13 @@ struct PlayerView: View {
                             CoverView(image: library.artworkImage, cornerRadius: 9).frame(width: 48, height: 48)
                             heading(track)
                         }
-                        LyricsView(palette: palette) { beginImport(artwork: false) }
+                        LyricsView(clock: library.clock, palette: palette) { beginImport(artwork: false) }
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                     } else {
                         artworkContent(track).frame(maxHeight: .infinity)
                     }
                     if !showLyrics { heading(track) }
-                    progress
+                    PlayerProgressView(library: library, clock: library.clock, palette: palette)
                     transport
                     footer
                 } else {
@@ -91,7 +89,6 @@ struct PlayerView: View {
             get: { library.message != nil && detailsTrack == nil && !showQueue },
             set: { if !$0 { library.message = nil } }
         )) { Button("OK") { library.message = nil } } message: { Text(library.message ?? "") }
-        .onChange(of: library.current?.id) { _, _ in scrubbing = false }
     }
 
     private func artworkContent(_ track: Track) -> some View {
@@ -105,7 +102,7 @@ struct PlayerView: View {
                     .shadow(color: .black.opacity(0.22), radius: 20, y: 12)
                     .accessibilityLabel("\(track.title)のジャケット")
                     .accessibilityIdentifier("player-cover")
-                if hasLines { TimedLyricsPreview(palette: palette) }
+                if hasLines { TimedLyricsPreview(clock: library.clock, palette: palette) }
                 Spacer(minLength: 0)
             }.frame(maxWidth: .infinity, maxHeight: .infinity)
         }
@@ -152,21 +149,6 @@ struct PlayerView: View {
                 .labelStyle(.iconOnly).font(.title2).frame(width: 44, height: 44)
                 .foregroundStyle(track.isFavorite ? palette.accent : palette.text)
                 .accessibilityIdentifier("favorite-toggle")
-        }
-    }
-
-    private var progress: some View {
-        VStack(spacing: 2) {
-            Slider(value: Binding(get: { scrubbing ? scrubPosition : library.position }, set: { scrubPosition = $0 }),
-                   in: 0...max(library.duration, 0.01), onEditingChanged: { editing in
-                if editing { scrubPosition = library.position; scrubbing = true }
-                else { scrubbing = false; library.seek(scrubPosition) }
-            }).tint(palette.accent).accessibilityLabel("再生位置")
-            HStack {
-                Text(time(scrubbing ? scrubPosition : library.position))
-                Spacer()
-                Text("−" + time(max(0, library.duration - (scrubbing ? scrubPosition : library.position))))
-            }.font(.caption.monospacedDigit()).foregroundStyle(palette.secondary)
         }
     }
 
@@ -232,10 +214,7 @@ struct PlayerView: View {
     private func beginImport(artwork: Bool) {
         importTarget = library.current?.id; importingArtwork = artwork; showImporter = true
     }
-    private func time(_ seconds: Double) -> String {
-        let value = Int(max(0, seconds.isFinite ? seconds : 0))
-        return String(format: "%d:%02d", value / 60, value % 60)
-    }
+
 }
 
 // This view deliberately does not observe MusicLibrary. Playback ticks must not
@@ -306,5 +285,33 @@ struct AirPlayButton: UIViewRepresentable {
     }
     func updateUIView(_ view: AVRoutePickerView, context: Context) {
         view.tintColor = tint; view.activeTintColor = tint
+    }
+}
+
+
+private struct PlayerProgressView: View {
+    @ObservedObject var library: MusicLibrary
+    @ObservedObject var clock: PlaybackClock
+    let palette: PlayerPalette
+    @State private var scrubPosition = 0.0
+    @State private var scrubbing = false
+    var body: some View {
+        VStack(spacing: 2) {
+            Slider(value: Binding(get: { scrubbing ? scrubPosition : clock.position }, set: { scrubPosition = $0 }),
+                   in: 0...max(library.duration, 0.01), onEditingChanged: { editing in
+                if editing { scrubPosition = clock.position; scrubbing = true }
+                else { scrubbing = false; library.seek(scrubPosition) }
+            }).tint(palette.accent).accessibilityLabel("再生位置")
+            HStack {
+                Text(time(scrubbing ? scrubPosition : clock.position))
+                Spacer()
+                Text("−" + time(max(0, library.duration - (scrubbing ? scrubPosition : clock.position))))
+            }.font(.caption.monospacedDigit()).foregroundStyle(palette.secondary)
+        }.onChange(of: library.current?.id) { _, _ in scrubbing = false }
+    }
+
+    private func time(_ seconds: Double) -> String {
+        let value = Int(max(0, seconds.isFinite ? seconds : 0))
+        return String(format: "%d:%02d", value / 60, value % 60)
     }
 }

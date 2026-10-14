@@ -2,6 +2,7 @@ import SwiftUI
 
 struct LyricsView: View {
     @EnvironmentObject private var library: MusicLibrary
+    @ObservedObject var clock: PlaybackClock
     @AppStorage("lyricsAutoScroll") private var autoScroll = true
     @AppStorage("lyricsTimestamps") private var timestamps = false
     @AppStorage("lyricsSize") private var size = 1
@@ -10,7 +11,7 @@ struct LyricsView: View {
     let palette: PlayerPalette
     let importLyrics: () -> Void
 
-    private var activeID: UUID? { library.current?.lyrics?.last { $0.seconds <= library.position }?.id }
+    private var activeID: UUID? { library.current?.lyrics?.last { $0.seconds <= clock.position }?.id }
     private var fontSize: CGFloat { standardSize * (size == 0 ? 0.83 : size == 2 ? 1.21 : 1) }
 
     var body: some View {
