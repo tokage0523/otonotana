@@ -13,11 +13,24 @@ final class MusicLibrary: NSObject, ObservableObject, AVAudioPlayerDelegate {
     @Published private(set) var duration: Double = 0
     @Published private(set) var importing = false
     @Published var message: String?
+    @Published var playerPresented = false
     @Published private(set) var artworkImage: UIImage?
     @Published private(set) var artworkTint = UIColor(red: 0.28, green: 0.23, blue: 0.38, alpha: 1)
 
     private var artworkCache: [String: UIImage] = [:]
     private var nowPlayingArtwork: MPMediaItemArtwork?
+
+    @Published private(set) var playlists: [Playlist] = []
+    @Published private(set) var manualAlbums: [ManualAlbum] = []
+    @Published private(set) var shuffleEnabled = false
+    @Published private(set) var repeatMode: RepeatMode = .off
+    private var playbackOrder = PlaybackOrder()
+    private var scanning = false
+    private var failedStamps: [String: String] = [:]
+    let sharedDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+    var albums: [AlbumGroup] { AlbumGroup.groups(tracks: tracks, manual: manualAlbums) }
+    var queueTracks: [Track] { playbackOrder.order.compactMap { id in tracks.first { $0.id == id } } }
+    var canGoNext: Bool { playbackOrder.canAdvance() }
 
     private var player: AVAudioPlayer?
     private var timer: Timer?
@@ -37,6 +50,20 @@ final class MusicLibrary: NSObject, ObservableObject, AVAudioPlayerDelegate {
                 tracks = try JSONDecoder().decode([Track].self, from: Data(contentsOf: indexURL))
             }
         } catch { message = "曲一覧を読み込めませんでした：\(error.localizedDescription)" }
+        do {
+            try FileManager.default.createDirectory(at: sharedDirectory, withIntermediateDirectories: true)
+            let playlistURL = directory.appendingPathComponent("playlists.json")
+            if FileManager.default.fileExists(atPath: playlistURL.path) {
+                playlists = try JSONDecoder().decode([Playlist].self, from: Data(contentsOf: playlistURL))
+            }
+            let albumsURL = directory.appendingPathComponent("albums.json")
+            if FileManager.default.fileExists(atPath: albumsURL.path) {
+                manualAlbums = try JSONDecoder().decode([ManualAlbum].self, from: Data(contentsOf: albumsURL))
+            }
+        } catch { message = "保存した一覧を読み込めませんでした：\(error.localizedDescription)" }
+        shuffleEnabled = UserDefaults.standard.bool(forKey: "shuffleEnabled")
+        repeatMode = RepeatMode(rawValue: UserDefaults.standard.string(forKey: "repeatMode") ?? "off") ?? .off
+        playbackOrder.shuffled = shuffleEnabled; playbackOrder.repeatMode = repeatMode
         configureCommands()
         observers.append(NotificationCenter.default.addObserver(
             forName: AVAudioSession.interruptionNotification, object: nil, queue: .main
@@ -121,9 +148,10 @@ final class MusicLibrary: NSObject, ObservableObject, AVAudioPlayerDelegate {
         guard !importing else { return }
         importing = true
         defer { importing = false }
+        while scanning { try? await Task.sleep(nanoseconds: 100_000_000) }
         var failures: [String] = []
         for source in urls {
-            let destinationDirectory = directory
+            let destinationDirectory = sharedDirectory
             do {
                 let track = try await Task.detached(priority: .userInitiated) {
                     let access = source.startAccessingSecurityScopedResource()
@@ -133,30 +161,208 @@ final class MusicLibrary: NSObject, ObservableObject, AVAudioPlayerDelegate {
                         throw NSError(domain: "MusicImport", code: 1, userInfo: [NSLocalizedDescriptionKey: "未対応の形式です"])
                     }
                     let id = UUID()
-                    let filename = "\(id.uuidString).\(ext)"
-                    let target = destinationDirectory.appendingPathComponent(filename)
-                    try FileManager.default.copyItem(at: source, to: target)
+                    let root = destinationDirectory.standardizedFileURL.path + "/"
+                    let alreadyShared = source.standardizedFileURL.path.hasPrefix(root)
+                    var filename = source.lastPathComponent
+                    if !alreadyShared && FileManager.default.fileExists(atPath: destinationDirectory.appendingPathComponent(filename).path) {
+                        filename = "\(id.uuidString)-\(filename)"
+                    }
+                    let target = alreadyShared ? source : destinationDirectory.appendingPathComponent(filename)
+                    if !alreadyShared { try FileManager.default.copyItem(at: source, to: target) }
                     do {
                         // Decode before committing the library entry; no conversion is performed.
                         _ = try AVAudioPlayer(contentsOf: target)
-                        return Track(id: id, title: source.deletingPathExtension().lastPathComponent, filename: filename)
+                        var value = Track(id: id, title: source.deletingPathExtension().lastPathComponent, filename: filename)
+                        value.sharedPath = String(target.standardizedFileURL.path.dropFirst(root.count))
+                        value.addedAt = Date()
+                        return value
                     } catch {
-                        try? FileManager.default.removeItem(at: target)
+                        if !alreadyShared { try? FileManager.default.removeItem(at: target) }
                         throw error
                     }
                 }.value
                 do {
+                    if tracks.contains(where: { $0.sharedPath == track.sharedPath }) { continue }
                     let updated = tracks + [track]
                     try save(updated)
                     tracks = updated
                     await readMetadata(for: track.id)
                 } catch {
-                    try? FileManager.default.removeItem(at: directory.appendingPathComponent(track.filename))
+                    // Keep the received audio available for retry if the index cannot be saved.
                     throw error
                 }
             } catch { failures.append("\(source.lastPathComponent)：\(error.localizedDescription)") }
         }
         if !failures.isEmpty { message = failures.joined(separator: "\n") }
+        importing = false
+        await scanSharedFiles()
+    }
+
+    func audioURL(for track: Track) -> URL {
+        if let path = track.sharedPath, let url = SharedFiles.safeURL(path, under: sharedDirectory) { return url }
+        let legacy = directory.appendingPathComponent(track.filename)
+        let migrated = sharedDirectory.appendingPathComponent("Music").appendingPathComponent(track.filename)
+        // Recover the narrow window between moving an old file and saving its index.
+        return FileManager.default.fileExists(atPath: legacy.path) ? legacy : migrated
+    }
+
+    func migrateLegacyAudio() {
+        let folder = sharedDirectory.appendingPathComponent("Music", isDirectory: true)
+        do {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            for original in tracks where original.sharedPath == nil {
+                let source = directory.appendingPathComponent(original.filename)
+                let target = folder.appendingPathComponent(original.filename)
+                let shouldMove = FileManager.default.fileExists(atPath: source.path)
+                guard shouldMove || FileManager.default.fileExists(atPath: target.path) else { continue }
+                if shouldMove { try FileManager.default.moveItem(at: source, to: target) }
+                var track = original; track.sharedPath = "Music/\(original.filename)"
+                do { try commitTrack(track) }
+                catch {
+                    if shouldMove { try? FileManager.default.moveItem(at: target, to: source) }
+                    throw error
+                }
+            }
+        } catch { message = "以前の音楽の移動を完了できませんでした。音楽は元の保存場所から引き続き再生できます。" }
+    }
+
+    private func removeUnusedArtwork(_ filename: String) {
+        guard !tracks.contains(where: { $0.artworkFilename == filename }) else { return }
+        artworkCache.removeValue(forKey: filename)
+        try? FileManager.default.removeItem(at: directory.appendingPathComponent(filename))
+    }
+
+    private func persistPlaylists() throws {
+        try JSONEncoder().encode(playlists).write(to: directory.appendingPathComponent("playlists.json"), options: .atomic)
+    }
+
+    func savePlaylist(id: UUID? = nil, title: String, trackIDs: [UUID]) {
+        guard let clean = title.nonEmpty else { return }
+        let value = Playlist(id: id ?? UUID(), title: clean, trackIDs: trackIDs.filter { id in tracks.contains { $0.id == id } })
+        var updated = playlists
+        if let index = updated.firstIndex(where: { $0.id == value.id }) { updated[index] = value }
+        else { updated.append(value) }
+        do {
+            try JSONEncoder().encode(updated).write(to: directory.appendingPathComponent("playlists.json"), options: .atomic)
+            playlists = updated
+        } catch { message = "プレイリストを保存できませんでした：\(error.localizedDescription)" }
+    }
+
+    func removePlaylist(_ playlist: Playlist) {
+        let updated = playlists.filter { $0.id != playlist.id }
+        do {
+            try JSONEncoder().encode(updated).write(to: directory.appendingPathComponent("playlists.json"), options: .atomic)
+            playlists = updated
+        } catch { message = error.localizedDescription }
+    }
+
+    func saveAlbum(id: UUID? = nil, title: String, artist: String, trackIDs: [UUID], artwork: Data? = nil) {
+        guard let clean = title.nonEmpty else { return }
+        let album = ManualAlbum(id: id ?? UUID(), title: clean, artist: artist)
+        var records = manualAlbums
+        if let index = records.firstIndex(where: { $0.id == album.id }) { records[index] = album }
+        else { records.append(album) }
+        var updated = tracks
+        for i in updated.indices {
+            if let number = trackIDs.firstIndex(of: updated[i].id) {
+                updated[i].albumID = album.id; updated[i].album = clean
+                updated[i].albumArtist = artist; updated[i].trackNumber = number + 1; updated[i].discNumber = 1
+            } else if updated[i].albumID == album.id { updated[i].albumID = nil; updated[i].album = nil; updated[i].albumArtist = nil }
+        }
+        do {
+            // Save the tracks last: until they reference this record, an extra album record is harmless.
+            try JSONEncoder().encode(records).write(to: directory.appendingPathComponent("albums.json"), options: .atomic)
+            try save(updated); manualAlbums = records; tracks = updated
+            if let current { self.current = updated.first { $0.id == current.id }; updateNowPlaying() }
+            if let artwork, let first = trackIDs.first {
+                try storeArtwork(artwork, for: first)
+                if let filename = tracks.first(where: { $0.id == first })?.artworkFilename {
+                    var withArtwork = tracks
+                    let old = withArtwork.filter { trackIDs.contains($0.id) }.compactMap(\.artworkFilename)
+                    for i in withArtwork.indices where trackIDs.contains(withArtwork[i].id) { withArtwork[i].artworkFilename = filename }
+                    try save(withArtwork); tracks = withArtwork
+                    if let current { self.current = tracks.first { $0.id == current.id }; loadCurrentArtwork(); updateNowPlaying() }
+                    for filename in Set(old) { removeUnusedArtwork(filename) }
+                }
+            }
+        } catch { message = "アルバムを保存できませんでした：\(error.localizedDescription)" }
+    }
+
+    func scanSharedFiles() async {
+        guard !scanning, !importing else { return }
+        scanning = true
+        defer { scanning = false }
+        let root = sharedDirectory
+        do {
+            let files = try await Task.detached(priority: .utility) { () -> [(String, String)] in
+                let keys: [URLResourceKey] = [.isRegularFileKey, .isSymbolicLinkKey, .contentModificationDateKey, .fileSizeKey]
+                guard let walker = FileManager.default.enumerator(at: root, includingPropertiesForKeys: keys, options: [.skipsHiddenFiles]) else { return [] }
+                var found: [(String, String)] = []
+                for case let url as URL in walker {
+                    let values = try url.resourceValues(forKeys: Set(keys))
+                    guard values.isRegularFile == true, values.isSymbolicLink != true,
+                          SharedFiles.audioExtensions.contains(url.pathExtension.lowercased()), (values.fileSize ?? 0) > 0 else { continue }
+                    let path = String(url.path.dropFirst(root.path.count + 1))
+                    let stamp = "\(values.fileSize ?? 0):\(values.contentModificationDate?.timeIntervalSince1970 ?? 0)"
+                    found.append((path, stamp))
+                }
+                return found.sorted { $0.0 < $1.0 }
+            }.value
+            for (path, stamp) in files {
+                guard let url = SharedFiles.safeURL(path, under: root) else { continue }
+                if failedStamps[path] == stamp { continue }
+                do {
+                    let id: UUID
+                    if let existing = tracks.first(where: { $0.sharedPath == path }) {
+                        id = existing.id
+                        if existing.fileStamp != stamp {
+                            _ = try await Task.detached { try AVAudioPlayer(contentsOf: url).duration }.value
+                            var latest = tracks.first { $0.id == id }!
+                            latest.fileStamp = stamp; try commitTrack(latest)
+                        }
+                    } else {
+                        _ = try await Task.detached { try AVAudioPlayer(contentsOf: url).duration }.value
+                        var track = Track(id: UUID(), title: url.deletingPathExtension().lastPathComponent, filename: url.lastPathComponent)
+                        track.sharedPath = path; track.fileStamp = stamp; track.addedAt = Date(); id = track.id
+                        let updated = tracks + [track]; try save(updated); tracks = updated
+                        await readMetadata(for: id)
+                    }
+                    await updateSidecars(audio: url, id: id)
+                } catch {
+                    failedStamps[path] = stamp
+                    message = "\(url.lastPathComponent)を登録できませんでした。転送完了後に設定の再読み込みを試してください。"
+                }
+            }
+        } catch { message = "共有ファイルを確認できませんでした：\(error.localizedDescription)" }
+    }
+
+    func rescanSharedFiles() async { failedStamps = [:]; await scanSharedFiles() }
+
+    private func updateSidecars(audio: URL, id: UUID) async {
+        let base = audio.deletingPathExtension()
+        func stamp(_ url: URL) -> String? {
+            guard let values = try? url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey, .isSymbolicLinkKey]),
+                  values.isSymbolicLink != true else { return nil }
+            return "\(url.lastPathComponent):\(values.fileSize ?? 0):\(values.contentModificationDate?.timeIntervalSince1970 ?? 0)"
+        }
+        let lrc = base.appendingPathExtension("lrc")
+        if let value = stamp(lrc), tracks.first(where: { $0.id == id })?.lyricsStamp != value {
+            do {
+                let lines = try await Task.detached { try Lyrics.parse(String(contentsOf: lrc, encoding: .utf8)) }.value
+                if var latest = tracks.first(where: { $0.id == id }) { latest.lyrics = lines; latest.lyricsStamp = value; try commitTrack(latest) }
+            } catch { message = "\(lrc.lastPathComponent)：\(error.localizedDescription)" }
+        }
+        let images = [base.appendingPathExtension("jpg"), base.appendingPathExtension("png"),
+                      audio.deletingLastPathComponent().appendingPathComponent("cover.jpg"),
+                      audio.deletingLastPathComponent().appendingPathComponent("cover.png")]
+        if let image = images.first(where: { FileManager.default.fileExists(atPath: $0.path) }),
+           let value = stamp(image), tracks.first(where: { $0.id == id })?.imageStamp != value {
+            do {
+                let data = try await Task.detached { try Data(contentsOf: image) }.value
+                try storeArtwork(data, for: id)
+                if var latest = tracks.first(where: { $0.id == id }) { latest.imageStamp = value; try commitTrack(latest) }
+            } catch { message = "ジャケットを読み込めませんでした：\(error.localizedDescription)" }
+        }
     }
 
     private func save(_ value: [Track]) throws {
@@ -178,10 +384,11 @@ final class MusicLibrary: NSObject, ObservableObject, AVAudioPlayerDelegate {
 
     private func readMetadata(for id: UUID) async {
         guard let original = tracks.first(where: { $0.id == id }) else { return }
-        let asset = AVURLAsset(url: directory.appendingPathComponent(original.filename))
+        let asset = AVURLAsset(url: audioURL(for: original))
         do {
             let items = try await asset.load(.commonMetadata)
             var title: String?, artist: String?, album: String?, imageData: Data?
+            var albumArtist: String?, trackNumber: Int?, discNumber: Int?
             for item in items {
                 switch item.commonKey {
                 case .commonKeyTitle: title = try? await item.load(.stringValue)
@@ -191,10 +398,28 @@ final class MusicLibrary: NSObject, ObservableObject, AVAudioPlayerDelegate {
                 default: break
                 }
             }
+            let formats = (try? await asset.load(.availableMetadataFormats)) ?? []
+            for format in formats {
+                for item in (try? await asset.loadMetadata(for: format)) ?? [] {
+                    if item.identifier == .iTunesMetadataAlbumArtist { albumArtist = try? await item.load(.stringValue) }
+                    if item.identifier == .iTunesMetadataTrackNumber || item.identifier == .iTunesMetadataDiscNumber {
+                        let number: Int?
+                        if let data = try? await item.load(.dataValue), data.count >= 4 {
+                            number = Int(data[2]) * 256 + Int(data[3])
+                        } else if let raw = try? await item.load(.stringValue) { number = Int(raw.split(separator: "/").first ?? "") }
+                        else { number = nil }
+                        if item.identifier == .iTunesMetadataTrackNumber { trackNumber = number }
+                        else { discNumber = number }
+                    }
+                }
+            }
             guard var latest = tracks.first(where: { $0.id == id }) else { return }
             if latest.title == original.title, let title, !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { latest.title = title }
             if latest.artist == nil { latest.artist = artist }
             if latest.album == nil { latest.album = album }
+            if latest.albumArtist == nil { latest.albumArtist = albumArtist }
+            if latest.trackNumber == nil { latest.trackNumber = trackNumber }
+            if latest.discNumber == nil { latest.discNumber = discNumber }
             try commitTrack(latest)
             if let imageData { try storeArtwork(imageData, for: id) }
         } catch {
@@ -212,7 +437,7 @@ final class MusicLibrary: NSObject, ObservableObject, AVAudioPlayerDelegate {
 
     private func loadCurrentArtwork() {
         artworkImage = current.flatMap { artwork(for: $0) }
-        artworkTint = artworkImage?.averageColor ?? UIColor(red: 0.28, green: 0.23, blue: 0.38, alpha: 1)
+        artworkTint = artworkImage?.prominentColor ?? UIColor(red: 0.28, green: 0.23, blue: 0.38, alpha: 1)
         if let image = artworkImage { nowPlayingArtwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image } }
         else { nowPlayingArtwork = nil }
     }
@@ -237,7 +462,7 @@ final class MusicLibrary: NSObject, ObservableObject, AVAudioPlayerDelegate {
         catch { try? FileManager.default.removeItem(at: url); throw error }
         if let old {
             artworkCache.removeValue(forKey: old)
-            try? FileManager.default.removeItem(at: directory.appendingPathComponent(old))
+            removeUnusedArtwork(old)
         }
     }
 
@@ -254,18 +479,22 @@ final class MusicLibrary: NSObject, ObservableObject, AVAudioPlayerDelegate {
             try commitTrack(track)
             if let old {
                 artworkCache.removeValue(forKey: old)
-                try? FileManager.default.removeItem(at: directory.appendingPathComponent(old))
+                removeUnusedArtwork(old)
             }
         } catch { message = "ジャケットを変更できませんでした：\(error.localizedDescription)" }
     }
 
-    func updateDetails(for id: UUID, title: String, artist: String, album: String) {
+    func updateDetails(for id: UUID, title: String, artist: String, album: String, albumArtist: String = "", trackNumber: Int? = nil) {
         guard var track = tracks.first(where: { $0.id == id }) else { return }
         let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanTitle.isEmpty else { message = "曲名を入力してください。"; return }
         track.title = cleanTitle
         track.artist = artist.trimmingCharacters(in: .whitespacesAndNewlines)
-        track.album = album.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanAlbum = album.trimmingCharacters(in: .whitespacesAndNewlines)
+        if track.album != cleanAlbum { track.albumID = nil }
+        track.album = cleanAlbum
+        track.albumArtist = albumArtist.trimmingCharacters(in: .whitespacesAndNewlines)
+        track.trackNumber = trackNumber
         do { try commitTrack(track) }
         catch { message = "曲の情報を保存できませんでした：\(error.localizedDescription)" }
     }
@@ -310,17 +539,28 @@ final class MusicLibrary: NSObject, ObservableObject, AVAudioPlayerDelegate {
             try save(updated)
             tracks = updated
             if current?.id == track.id { stop() }
-            try FileManager.default.removeItem(at: directory.appendingPathComponent(track.filename))
+            playbackOrder.remove(track.id)
+            if FileManager.default.fileExists(atPath: audioURL(for: track).path) { try FileManager.default.removeItem(at: audioURL(for: track)) }
+            for index in playlists.indices { playlists[index].trackIDs.removeAll { $0 == track.id } }
+            try persistPlaylists()
             if let filename = track.artworkFilename {
                 artworkCache.removeValue(forKey: filename)
-                try? FileManager.default.removeItem(at: directory.appendingPathComponent(filename))
+                removeUnusedArtwork(filename)
             }
         } catch { message = "削除できませんでした：\(error.localizedDescription)" }
     }
 
-    func select(_ track: Track) {
+    func select(_ track: Track, context: [Track]? = nil) {
+        let old = playbackOrder
+        playbackOrder.start(track.id, in: (context ?? tracks).map(\.id))
+        if current?.id == track.id, player != nil { updateNowPlaying(); return }
+        if !loadTrack(track) { playbackOrder = old }
+    }
+
+    @discardableResult
+    private func loadTrack(_ track: Track) -> Bool {
         do {
-            let next = try AVAudioPlayer(contentsOf: directory.appendingPathComponent(track.filename))
+            let next = try AVAudioPlayer(contentsOf: audioURL(for: track))
             next.delegate = self
             next.prepareToPlay()
             player?.stop()
@@ -332,7 +572,8 @@ final class MusicLibrary: NSObject, ObservableObject, AVAudioPlayerDelegate {
             duration = next.duration
             playing = false
             resume()
-        } catch { message = "再生できませんでした：\(error.localizedDescription)" }
+            return true
+        } catch { message = "再生できませんでした：\(error.localizedDescription)"; return false }
     }
 
     func toggle() {
@@ -354,11 +595,12 @@ final class MusicLibrary: NSObject, ObservableObject, AVAudioPlayerDelegate {
             }
             playing = true
             timer?.invalidate()
-            timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+            timer = Timer.scheduledTimer(withTimeInterval: 0.2, repeats: true) { [weak self] _ in
                 Task { @MainActor [weak self] in
                     guard let self else { return }
+                    let before = self.position
                     self.position = self.player?.currentTime ?? 0
-                    self.updateNowPlaying()
+                    if Int(before) != Int(self.position) { self.updateNowPlaying() }
                 }
             }
             updateNowPlaying()
@@ -394,22 +636,35 @@ final class MusicLibrary: NSObject, ObservableObject, AVAudioPlayerDelegate {
         updateNowPlaying()
     }
 
-    func next() {
-        guard let current, let index = tracks.firstIndex(where: { $0.id == current.id }), index + 1 < tracks.count else { return }
-        select(tracks[index + 1])
+    func toggleShuffle() {
+        shuffleEnabled.toggle(); playbackOrder.setShuffle(shuffleEnabled)
+        UserDefaults.standard.set(shuffleEnabled, forKey: "shuffleEnabled")
+        updateNowPlaying()
     }
-
+    func cycleRepeat() {
+        let modes = RepeatMode.allCases
+        repeatMode = modes[(modes.firstIndex(of: repeatMode)! + 1) % modes.count]
+        playbackOrder.repeatMode = repeatMode
+        UserDefaults.standard.set(repeatMode.rawValue, forKey: "repeatMode")
+        updateNowPlaying()
+    }
+    func next(automatic: Bool = false) {
+        let old = playbackOrder
+        guard let id = playbackOrder.advance(automatic: automatic), let track = tracks.first(where: { $0.id == id }) else { return }
+        if !loadTrack(track) { playbackOrder = old }
+    }
     func previous() {
         if position > 3 { seek(0); return }
-        guard let current, let index = tracks.firstIndex(where: { $0.id == current.id }), index > 0 else { seek(0); return }
-        select(tracks[index - 1])
+        let old = playbackOrder
+        guard let id = playbackOrder.retreat(), let track = tracks.first(where: { $0.id == id }) else { seek(0); return }
+        if !loadTrack(track) { playbackOrder = old }
     }
 
     nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
         Task { @MainActor [weak self] in
             guard let self, self.player === player else { return }
             self.pause()
-            if flag { self.next() }
+            if flag { self.next(automatic: true) }
             else { self.message = "曲の再生中にエラーが発生しました。" }
         }
     }
@@ -434,8 +689,7 @@ final class MusicLibrary: NSObject, ObservableObject, AVAudioPlayerDelegate {
         if let album = current.album { info[MPMediaItemPropertyAlbumTitle] = album }
         if let artwork = nowPlayingArtwork { info[MPMediaItemPropertyArtwork] = artwork }
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
-        let index = tracks.firstIndex(where: { $0.id == current.id }) ?? 0
-        MPRemoteCommandCenter.shared().nextTrackCommand.isEnabled = index + 1 < tracks.count
+        MPRemoteCommandCenter.shared().nextTrackCommand.isEnabled = canGoNext
         MPRemoteCommandCenter.shared().previousTrackCommand.isEnabled = true
     }
 

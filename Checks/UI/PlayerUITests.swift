@@ -11,7 +11,7 @@ final class PlayerUITests: XCTestCase {
         app.buttons[rowID].tap()
         XCTAssertTrue(app.buttons["lyrics-toggle"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["player-track-title"].exists)
-        let preview = app.staticTexts["lyrics-preview"]
+        let preview = app.descendants(matching: .any).matching(identifier: "lyrics-preview").firstMatch
         XCTAssertTrue(preview.exists)
         XCTAssertLessThanOrEqual(preview.frame.maxY, app.staticTexts["player-track-title"].frame.minY)
         capture(app, "01-artwork-player")
@@ -21,6 +21,9 @@ final class PlayerUITests: XCTestCase {
         XCTAssertTrue(follow.waitForExistence(timeout: 5))
         XCTAssertEqual(follow.value as? String, "オン")
         capture(app, "02-lyrics-follow-on")
+        app.buttons["lyrics-size-0"].tap()
+        app.buttons["lyrics-size-2"].tap()
+        app.buttons["lyrics-size-1"].tap()
         follow.tap()
         XCTAssertEqual(follow.value as? String, "オフ")
         app.buttons["lyric-28.0"].tap()
@@ -47,6 +50,55 @@ final class PlayerUITests: XCTestCase {
         XCTAssertEqual(app.buttons["favorite-toggle"].label, "お気に入りを解除")
         app.buttons["lyrics-toggle"].tap()
         XCTAssertEqual(app.buttons["lyrics-follow-toggle"].value as? String, "オフ")
+    }
+
+    func testLibraryModesEqualSpacingAndPlaylistPersistence() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-fixture", "--reset-ui-preferences"]
+        app.launch()
+        let modes = ["曲", "アルバム", "アーティスト"].map { app.buttons["mode-\($0)"] }
+        XCTAssertTrue(modes[0].waitForExistence(timeout: 15))
+        XCTAssertEqual(modes[1].frame.midX - modes[0].frame.midX, modes[2].frame.midX - modes[1].frame.midX, accuracy: 1.5)
+        let tabs = ["ライブラリ", "プレイリスト", "設定"].map { app.buttons["tab-\($0)"] }
+        XCTAssertEqual(tabs[1].frame.midX - tabs[0].frame.midX, tabs[2].frame.midX - tabs[1].frame.midX, accuracy: 1.5)
+        capture(app, "04-songs-library")
+        modes[1].tap()
+        XCTAssertTrue(app.staticTexts["A little light"].waitForExistence(timeout: 5))
+        capture(app, "05-albums-library")
+        app.staticTexts["A little light"].tap()
+        XCTAssertTrue(app.buttons["アルバムを編集"].waitForExistence(timeout: 5))
+        capture(app, "06-album-detail")
+        tabs[1].tap()
+        app.buttons["add-playlist"].tap()
+        let name = "My test set"
+        app.textFields["collection-title"].tap(); app.textFields["collection-title"].typeText(name)
+        app.buttons["collection-add-00000000-0000-0000-0000-000000000002"].tap()
+        app.buttons["collection-save"].tap()
+        XCTAssertTrue(app.staticTexts[name].waitForExistence(timeout: 5))
+        capture(app, "07-playlists")
+        tabs[2].tap()
+        XCTAssertTrue(app.switches["settings-timestamps"].waitForExistence(timeout: 5))
+        capture(app, "08-settings")
+        app.terminate(); app.launchArguments = ["--ui-test-fixture"]; app.launch()
+        app.buttons["tab-プレイリスト"].tap()
+        XCTAssertTrue(app.staticTexts[name].waitForExistence(timeout: 5))
+    }
+
+    func testSharedAudioAndMatchingLyricsAreRegistered() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-fixture", "--shared-test-fixture"]
+        app.launch()
+        XCTAssertTrue(app.staticTexts["Shared test"].waitForExistence(timeout: 20))
+        app.staticTexts["Shared test"].tap()
+        app.buttons["lyrics-toggle"].tap()
+        XCTAssertTrue(app.buttons["lyric-0.0"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["共有ファイルの歌詞"].exists)
+        app.buttons["lyric-12.0"].tap()
+        app.buttons["player-play-pause"].tap()
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label MATCHES %@", "^0:1[2-9]$")).firstMatch.exists)
+        capture(app, "09-shared-lyrics")
     }
 
     private func capture(_ app: XCUIApplication, _ name: String) {

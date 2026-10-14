@@ -19,24 +19,26 @@ struct PlayerView: View {
     @State private var photoLoading = false
     @State private var scrubPosition = 0.0
     @State private var scrubbing = false
-    @ScaledMetric(relativeTo: .subheadline) private var previewHeight: CGFloat = 44
 
     private var theme: PlayerTheme { PlayerTheme(rawValue: themeName) ?? .artwork }
     private var palette: PlayerPalette { PlayerPalette(theme: theme, tint: library.artworkTint) }
-    private var activeLine: String? { library.current?.lyrics?.last(where: { $0.seconds <= library.position })?.text }
 
     var body: some View {
         GeometryReader { geometry in
-            VStack(spacing: 18) {
+            VStack(spacing: 14) {
                 header
                 if let track = library.current {
                     if showLyrics {
+                        HStack(spacing: 12) {
+                            CoverView(image: library.artworkImage, cornerRadius: 9).frame(width: 48, height: 48)
+                            heading(track)
+                        }
                         LyricsView(palette: palette) { beginImport(artwork: false) }
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                     } else {
                         artworkContent(track).frame(maxHeight: .infinity)
                     }
-                    heading(track)
+                    if !showLyrics { heading(track) }
                     progress
                     transport
                     footer
@@ -44,7 +46,7 @@ struct PlayerView: View {
                     ContentUnavailableView("曲を選んでください", systemImage: "music.note")
                 }
             }
-            .padding(.horizontal, 26).padding(.top, 14).padding(.bottom, 12)
+            .padding(.horizontal, 22).padding(.top, 14).padding(.bottom, 12)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(LinearGradient(colors: [palette.top, palette.bottom], startPoint: .top, endPoint: .bottom).ignoresSafeArea())
             .foregroundStyle(palette.text)
@@ -94,22 +96,16 @@ struct PlayerView: View {
 
     private func artworkContent(_ track: Track) -> some View {
         GeometryReader { available in
-            let line = lyricsPreview ? activeLine : nil
-            let hasLine = line?.isEmpty == false
-            let reservedHeight = hasLine ? previewHeight + 36 : 16
-            VStack(spacing: 18) {
+            let hasLines = lyricsPreview && library.current?.lyrics?.isEmpty == false
+            let reservedHeight: CGFloat = hasLines ? 96 : 16
+            VStack(spacing: 16) {
                 Spacer(minLength: 0)
                 CoverView(image: library.artworkImage)
-                    .frame(width: min(available.size.width - 16, max(40, available.size.height - reservedHeight)))
+                    .frame(width: min(available.size.width - 12, max(40, available.size.height - reservedHeight)))
                     .shadow(color: .black.opacity(0.22), radius: 20, y: 12)
                     .accessibilityLabel("\(track.title)のジャケット")
                     .accessibilityIdentifier("player-cover")
-                if hasLine, let line {
-                    Text(line).font(.subheadline).multilineTextAlignment(.center)
-                        .foregroundStyle(palette.secondary).lineLimit(2)
-                        .frame(maxWidth: .infinity).frame(height: previewHeight)
-                        .accessibilityIdentifier("lyrics-preview")
-                }
+                if hasLines { TimedLyricsPreview(palette: palette) }
                 Spacer(minLength: 0)
             }.frame(maxWidth: .infinity, maxHeight: .infinity)
         }
@@ -141,11 +137,7 @@ struct PlayerView: View {
                     }
                     Button("曲の情報を編集", systemImage: "pencil") { detailsTrack = library.current }
                     Button("LRCを読み込む", systemImage: "doc.badge.plus") { beginImport(artwork: false) }
-                    Divider()
-                    Picker("画面の色", selection: $themeName) {
-                        ForEach(PlayerTheme.allCases) { Text($0.name).tag($0.rawValue) }
-                    }
-                    Toggle("ジャケット下に歌詞を表示", isOn: $lyricsPreview)
+
                 } label: { Image(systemName: "ellipsis").frame(width: 44, height: 44) }
                     .accessibilityLabel("曲と表示の設定")
                     .accessibilityIdentifier("player-options")
@@ -156,7 +148,7 @@ struct PlayerView: View {
     private func heading(_ track: Track) -> some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 5) {
-                Text(track.title).font(.title2.bold()).lineLimit(2).minimumScaleFactor(0.8)
+                Text(track.title).font(showLyrics ? .headline : .title2.bold()).lineLimit(2).minimumScaleFactor(0.8)
                     .accessibilityIdentifier("player-track-title")
                 if let artist = track.artist, !artist.isEmpty {
                     Text(artist).font(.subheadline).foregroundStyle(palette.secondary).lineLimit(1)
@@ -186,39 +178,50 @@ struct PlayerView: View {
     }
 
     private var transport: some View {
-        HStack(spacing: 48) {
-            Button("前の曲", systemImage: "backward.end.fill") { library.previous() }
-                .font(.system(size: 26)).frame(width: 52, height: 52)
-            Button(library.playing ? "一時停止" : "再生", systemImage: library.playing ? "pause.fill" : "play.fill") { library.toggle() }
-                .font(.system(size: 42)).frame(width: 64, height: 64)
-                .accessibilityIdentifier("player-play-pause")
-            Button("次の曲", systemImage: "forward.end.fill") { library.next() }
-                .font(.system(size: 26)).frame(width: 52, height: 52)
-                .disabled(library.current?.id == library.tracks.last?.id)
-        }.labelStyle(.iconOnly).padding(.vertical, 4)
+        HStack(spacing: 0) {
+            Button { library.toggleShuffle() } label: {
+                Image(systemName: "shuffle").font(.system(size: 20))
+                    .foregroundStyle(palette.text.opacity(library.shuffleEnabled ? 1 : 0.45))
+                    .frame(maxWidth: .infinity).frame(height: 64).contentShape(Rectangle())
+            }.accessibilityLabel("シャッフル").accessibilityValue(library.shuffleEnabled ? "オン" : "オフ").accessibilityIdentifier("player-shuffle")
+            Button { library.previous() } label: {
+                Image(systemName: "backward.end.fill").font(.system(size: 27)).frame(maxWidth: .infinity).frame(height: 64).contentShape(Rectangle())
+            }.accessibilityLabel("前の曲")
+            Button { library.toggle() } label: {
+                Image(systemName: library.playing ? "pause.fill" : "play.fill").font(.system(size: 40))
+                    .frame(maxWidth: .infinity).frame(height: 64).contentShape(Rectangle())
+            }.accessibilityLabel(library.playing ? "一時停止" : "再生").accessibilityIdentifier("player-play-pause")
+            Button { library.next() } label: {
+                Image(systemName: "forward.end.fill").font(.system(size: 27)).frame(maxWidth: .infinity).frame(height: 64).contentShape(Rectangle())
+            }.accessibilityLabel("次の曲").disabled(!library.canGoNext)
+            Button { library.cycleRepeat() } label: {
+                Image(systemName: library.repeatMode == .one ? "repeat.1" : "repeat").font(.system(size: 20))
+                    .foregroundStyle(palette.text.opacity(library.repeatMode == .off ? 0.45 : 1))
+                    .frame(maxWidth: .infinity).frame(height: 64).contentShape(Rectangle())
+            }.accessibilityLabel(library.repeatMode.label).accessibilityIdentifier("player-repeat")
+        }.buttonStyle(.plain)
     }
 
     private var footer: some View {
-        HStack {
+        HStack(spacing: 0) {
             Button { withAnimation(.easeInOut(duration: 0.2)) { showLyrics.toggle() } } label: {
                 Image(systemName: showLyrics ? "quote.bubble.fill" : "quote.bubble").font(.title2)
-                    .frame(width: 52, height: 44)
+                    .frame(width: 48, height: 44)
                     .background(showLyrics ? palette.text.opacity(0.13) : .clear, in: RoundedRectangle(cornerRadius: 12))
+                    .frame(maxWidth: .infinity).contentShape(Rectangle())
             }.accessibilityLabel(showLyrics ? "ジャケットを表示" : "歌詞を表示")
-                .accessibilityIdentifier("lyrics-toggle")
-                .accessibilityValue(showLyrics ? "歌詞表示中" : "ジャケット表示中")
-            Spacer()
-            AirPlayButton(tint: UIColor(palette.text)).frame(width: 44, height: 44).accessibilityLabel("再生先を選択")
-            Spacer()
-            Button("曲一覧", systemImage: "list.bullet") { showQueue = true }
-                .labelStyle(.iconOnly).font(.title2).frame(width: 52, height: 44)
-        }
+                .accessibilityIdentifier("lyrics-toggle").accessibilityValue(showLyrics ? "歌詞表示中" : "ジャケット表示中")
+            AirPlayButton(tint: UIColor(palette.text)).frame(width: 44, height: 44).frame(maxWidth: .infinity).accessibilityLabel("再生先を選択")
+            Button { showQueue = true } label: {
+                Image(systemName: "list.bullet").font(.title2).frame(width: 48, height: 44).frame(maxWidth: .infinity).contentShape(Rectangle())
+            }.accessibilityLabel("再生する曲一覧")
+        }.buttonStyle(.plain)
     }
 
     private var queue: some View {
         NavigationStack {
-            List(library.tracks) { track in
-                Button { library.select(track); showQueue = false } label: {
+            List(library.queueTracks) { track in
+                Button { library.select(track, context: library.queueTracks); showQueue = false } label: {
                     HStack(spacing: 12) {
                         CoverView(image: library.artwork(for: track), cornerRadius: 8).frame(width: 44, height: 44)
                         VStack(alignment: .leading, spacing: 4) {
@@ -249,6 +252,8 @@ struct TrackDetailsView: View {
     @State private var title = ""
     @State private var artist = ""
     @State private var album = ""
+    @State private var albumArtist = ""
+    @State private var trackNumber = ""
     var body: some View {
         NavigationStack {
             Form {
@@ -256,18 +261,24 @@ struct TrackDetailsView: View {
                     TextField("曲名", text: $title)
                     TextField("アーティスト", text: $artist)
                     TextField("アルバム", text: $album)
+                    TextField("アルバムアーティスト", text: $albumArtist)
+                    TextField("収録順", text: $trackNumber).keyboardType(.numberPad)
                 }
             }.navigationTitle("曲の情報")
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) { Button("キャンセル") { dismiss() } }
                     ToolbarItem(placement: .confirmationAction) {
                         Button("保存") {
-                            library.updateDetails(for: track.id, title: title, artist: artist, album: album)
+                            library.updateDetails(for: track.id, title: title, artist: artist, album: album,
+                                                  albumArtist: albumArtist, trackNumber: Int(trackNumber))
                             if library.message == nil { dismiss() }
                         }.disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     }
                 }
-                .onAppear { title = track.title; artist = track.artist ?? ""; album = track.album ?? "" }
+                .onAppear {
+                    title = track.title; artist = track.artist ?? ""; album = track.album ?? ""
+                    albumArtist = track.albumArtist ?? ""; trackNumber = track.trackNumber.map(String.init) ?? ""
+                }
                 .alert("保存できませんでした", isPresented: Binding(
                     get: { library.message != nil }, set: { if !$0 { library.message = nil } }
                 )) { Button("OK") { library.message = nil } } message: { Text(library.message ?? "") }

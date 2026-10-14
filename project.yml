@@ -20,8 +20,10 @@ targets:
       path: Info.plist
       properties:
         CFBundleDisplayName: Otonotana
-        CFBundleShortVersionString: '0.2.0'
-        CFBundleVersion: '2'
+        CFBundleShortVersionString: '0.3.0'
+        CFBundleVersion: '3'
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
         UILaunchScreen: {}
         UIBackgroundModes: [audio]
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]

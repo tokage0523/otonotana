@@ -23,10 +23,11 @@ struct PlayerPalette {
     init(theme: PlayerTheme, tint: UIColor) {
         switch theme {
         case .artwork:
-            var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
-            tint.getRed(&r, green: &g, blue: &b, alpha: &a)
-            top = Color(red: Double(r * 0.55 + 0.08), green: Double(g * 0.55 + 0.08), blue: Double(b * 0.55 + 0.08))
-            bottom = Color(red: Double(r * 0.15 + 0.035), green: Double(g * 0.15 + 0.035), blue: Double(b * 0.15 + 0.035))
+            var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+            tint.getHue(&h, saturation: &s, brightness: &b, alpha: &a)
+            let saturation = s < 0.08 ? s : min(0.85, max(0.38, s))
+            top = Color(UIColor(hue: h, saturation: saturation, brightness: min(0.68, max(0.42, b * 0.8)), alpha: 1))
+            bottom = Color(UIColor(hue: h, saturation: min(1, saturation * 1.15), brightness: min(0.3, max(0.12, b * 0.32)), alpha: 1))
             text = .white; secondary = .white.opacity(0.62); accent = .white
         case .midnight:
             top = Color(red: 0.12, green: 0.13, blue: 0.20)
@@ -69,6 +70,34 @@ struct CoverView: View {
 }
 
 extension UIImage {
+    var prominentColor: UIColor? {
+        guard let cgImage else { return averageColor }
+        let size = 20
+        var pixels = [UInt8](repeating: 0, count: size * size * 4)
+        let succeeded = pixels.withUnsafeMutableBytes { bytes -> Bool in
+            guard let context = CGContext(data: bytes.baseAddress, width: size, height: size, bitsPerComponent: 8,
+                                          bytesPerRow: size * 4, space: CGColorSpaceCreateDeviceRGB(),
+                                          bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return false }
+            context.draw(cgImage, in: CGRect(x: 0, y: 0, width: size, height: size)); return true
+        }
+        guard succeeded else { return averageColor }
+        var weights = [CGFloat](repeating: 0, count: 12)
+        var colors = [UIColor?](repeating: nil, count: 12)
+        var best = [CGFloat](repeating: 0, count: 12)
+        for index in stride(from: 0, to: pixels.count, by: 4) {
+            let color = UIColor(red: CGFloat(pixels[index]) / 255, green: CGFloat(pixels[index + 1]) / 255,
+                                blue: CGFloat(pixels[index + 2]) / 255, alpha: 1)
+            var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+            color.getHue(&h, saturation: &s, brightness: &b, alpha: &a)
+            guard s > 0.12, b > 0.2, pixels[index + 3] > 200 else { continue }
+            let bucket = min(11, Int(h * 12)), score = s * b
+            weights[bucket] += score
+            if score > best[bucket] { best[bucket] = score; colors[bucket] = color }
+        }
+        guard let bucket = weights.indices.max(by: { weights[$0] < weights[$1] }), weights[bucket] > 0 else { return averageColor }
+        return colors[bucket]
+    }
+
     var averageColor: UIColor? {
         guard let cgImage else { return nil }
         var pixel = [UInt8](repeating: 0, count: 4)
