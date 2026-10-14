@@ -94,7 +94,7 @@ final class PlayerUITests: XCTestCase {
         app.staticTexts["Shared test"].tap()
         app.buttons["lyrics-toggle"].tap()
         XCTAssertTrue(app.buttons["lyric-0.0"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["共有ファイルの歌詞"].exists)
+        XCTAssertTrue(app.buttons["lyric-0.0"].label.contains("共有ファイルの歌詞"))
         app.buttons["lyric-12.0"].tap()
         app.buttons["player-play-pause"].tap()
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label MATCHES %@", "^0:1[2-9]$")).firstMatch.exists)
