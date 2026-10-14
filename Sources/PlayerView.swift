@@ -181,6 +181,7 @@ struct PlayerView: View {
                 .font(.system(size: 26)).frame(width: 52, height: 52)
             Button(library.playing ? "一時停止" : "再生", systemImage: library.playing ? "pause.fill" : "play.fill") { library.toggle() }
                 .font(.system(size: 42)).frame(width: 64, height: 64)
+                .accessibilityIdentifier("player-play-pause")
             Button("次の曲", systemImage: "forward.end.fill") { library.next() }
                 .font(.system(size: 26)).frame(width: 52, height: 52)
                 .disabled(library.current?.id == library.tracks.last?.id)

@@ -6,6 +6,7 @@ on:
     paths:
       - 'Sources/**'
       - 'Checks/main.swift'
+      - 'Checks/UI/**'
       - 'PCEditor/lyrics-core*'
       - 'project.yml'
       - '.github/workflows/build-ios.yml'

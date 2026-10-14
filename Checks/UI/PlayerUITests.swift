@@ -21,9 +21,10 @@ final class PlayerUITests: XCTestCase {
         follow.tap()
         XCTAssertEqual(follow.value as? String, "オフ")
         app.buttons["lyric-42.0"].tap()
-        XCTAssertTrue(app.buttons["一時停止"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["player-play-pause"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.buttons["player-play-pause"].label, "一時停止")
         XCTAssertTrue(app.staticTexts["0:42"].exists)
-        app.buttons["一時停止"].tap()
+        app.buttons["player-play-pause"].tap()
         capture(app, "03-lyrics-follow-off")
 
         // Browsing earlier lyrics must stay possible when auto-scroll is disabled.
