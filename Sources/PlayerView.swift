@@ -19,6 +19,7 @@ struct PlayerView: View {
     @State private var photoLoading = false
     @State private var scrubPosition = 0.0
     @State private var scrubbing = false
+    @ScaledMetric(relativeTo: .subheadline) private var previewHeight: CGFloat = 44
 
     private var theme: PlayerTheme { PlayerTheme(rawValue: themeName) ?? .artwork }
     private var palette: PlayerPalette { PlayerPalette(theme: theme, tint: library.artworkTint) }
@@ -33,21 +34,7 @@ struct PlayerView: View {
                         LyricsView(palette: palette) { beginImport(artwork: false) }
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                     } else {
-                        ScrollView {
-                            VStack(spacing: 20) {
-                                Spacer(minLength: 8)
-                                CoverView(image: library.artworkImage)
-                                    .frame(width: min(max(180, geometry.size.height * 0.43), geometry.size.width - 52))
-                                    .shadow(color: .black.opacity(0.22), radius: 20, y: 12)
-                                    .accessibilityLabel("\(track.title)のジャケット")
-                                    .accessibilityIdentifier("player-cover")
-                                if lyricsPreview, let line = activeLine, !line.isEmpty {
-                                    Text(line).font(.subheadline).multilineTextAlignment(.center)
-                                        .foregroundStyle(palette.secondary).lineLimit(2)
-                                        .frame(maxWidth: .infinity, minHeight: 42)
-                                }
-                            }.frame(maxWidth: .infinity)
-                        }.scrollIndicators(.hidden).frame(maxHeight: .infinity)
+                        artworkContent(track).frame(maxHeight: .infinity)
                     }
                     heading(track)
                     progress
@@ -103,6 +90,29 @@ struct PlayerView: View {
             set: { if !$0 { library.message = nil } }
         )) { Button("OK") { library.message = nil } } message: { Text(library.message ?? "") }
         .onChange(of: library.current?.id) { _, _ in scrubbing = false }
+    }
+
+    private func artworkContent(_ track: Track) -> some View {
+        GeometryReader { available in
+            let line = lyricsPreview ? activeLine : nil
+            let hasLine = line?.isEmpty == false
+            let reservedHeight = hasLine ? previewHeight + 36 : 16
+            VStack(spacing: 18) {
+                Spacer(minLength: 0)
+                CoverView(image: library.artworkImage)
+                    .frame(width: min(available.size.width - 16, max(40, available.size.height - reservedHeight)))
+                    .shadow(color: .black.opacity(0.22), radius: 20, y: 12)
+                    .accessibilityLabel("\(track.title)のジャケット")
+                    .accessibilityIdentifier("player-cover")
+                if hasLine, let line {
+                    Text(line).font(.subheadline).multilineTextAlignment(.center)
+                        .foregroundStyle(palette.secondary).lineLimit(2)
+                        .frame(maxWidth: .infinity).frame(height: previewHeight)
+                        .accessibilityIdentifier("lyrics-preview")
+                }
+                Spacer(minLength: 0)
+            }.frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
     }
 
     private var header: some View {

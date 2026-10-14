@@ -11,6 +11,9 @@ final class PlayerUITests: XCTestCase {
         app.buttons[rowID].tap()
         XCTAssertTrue(app.buttons["lyrics-toggle"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["player-track-title"].exists)
+        let preview = app.staticTexts["lyrics-preview"]
+        XCTAssertTrue(preview.exists)
+        XCTAssertLessThanOrEqual(preview.frame.maxY, app.staticTexts["player-track-title"].frame.minY)
         capture(app, "01-artwork-player")
 
         app.buttons["lyrics-toggle"].tap()
