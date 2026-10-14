@@ -45,7 +45,10 @@ final class PlayerUITests: XCTestCase {
         func choose(_ name: String) {
             app.buttons["tab-設定"].tap()
             app.buttons["settings-appearance"].tap()
-            app.staticTexts[name].firstMatch.tap()
+            let key = name == "ダーク" ? "dark" : name == "ライト" ? "light" : "system"
+            let option = app.buttons["appearance-\(key)"]
+            XCTAssertTrue(option.waitForExistence(timeout: 5))
+            option.tap()
             if !app.buttons["settings-appearance"].exists { app.navigationBars.buttons.element(boundBy: 0).tap() }
             app.buttons["tab-ライブラリ"].tap()
             XCTAssertTrue(app.buttons["mode-曲"].waitForExistence(timeout: 5))
@@ -53,7 +56,16 @@ final class PlayerUITests: XCTestCase {
         func backgroundPixels() -> Data? {
             guard let image = app.screenshot().image.cgImage else { return nil }
             let region = CGRect(x: CGFloat(image.width) * 0.45, y: CGFloat(image.height) * 0.58, width: 10, height: 10)
-            return image.cropping(to: region)?.dataProvider?.data as Data?
+            guard let cropped = image.cropping(to: region) else { return nil }
+            var pixels = [UInt8](repeating: 0, count: 400)
+            let rendered = pixels.withUnsafeMutableBytes { buffer -> Bool in
+                guard let context = CGContext(data: buffer.baseAddress, width: 10, height: 10, bitsPerComponent: 8,
+                                              bytesPerRow: 40, space: CGColorSpaceCreateDeviceRGB(),
+                                              bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return false }
+                context.draw(cropped, in: CGRect(x: 0, y: 0, width: 10, height: 10))
+                return true
+            }
+            return rendered ? Data(pixels) : nil
         }
         choose("ダーク")
         let dark = backgroundPixels()
