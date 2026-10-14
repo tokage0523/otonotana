@@ -27,3 +27,14 @@ targets:
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
     scheme:
       gatherCoverageData: false
+      testTargets: [M4APlayerUITests]
+  M4APlayerUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [Checks/UI]
+    dependencies:
+      - target: M4APlayer
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: M4APlayer

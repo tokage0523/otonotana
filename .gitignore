@@ -6,3 +6,4 @@ build/
 *.p12
 *.mobileprovision
 Checks/output/
+Design/output/

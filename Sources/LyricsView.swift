@@ -20,6 +20,7 @@ struct LyricsView: View {
                         .font(.caption.weight(.semibold)).padding(.horizontal, 12).padding(.vertical, 10)
                         .background(palette.text.opacity(autoScroll ? 0.15 : 0.07), in: Capsule())
                 }.accessibilityLabel("歌詞の自動スクロール")
+                .accessibilityIdentifier("lyrics-follow-toggle")
                     .accessibilityValue(autoScroll ? "オン" : "オフ")
                     .accessibilityHint("オフにすると好きな位置を読めます")
                 Spacer()
@@ -42,7 +43,7 @@ struct LyricsView: View {
                                         .padding(.horizontal, 16).padding(.vertical, 12)
                                         .background(line.id == activeID ? palette.text.opacity(0.1) : .clear,
                                                     in: RoundedRectangle(cornerRadius: 14))
-                                }.buttonStyle(.plain).id(line.id)
+                                }.buttonStyle(.plain).id(line.id).accessibilityIdentifier("lyric-\(line.seconds)")
                                     .accessibilityHint("この歌詞の時刻から再生")
                             }
                         }.padding(.vertical, 70)

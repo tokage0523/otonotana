@@ -64,6 +64,9 @@ final class MusicLibrary: NSObject, ObservableObject, AVAudioPlayerDelegate {
                 Task { @MainActor [weak self] in self?.pause() }
             }
         })
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("--ui-test-fixture") { prepareUITestFixture() }
+        #endif
     }
 
     deinit {
@@ -71,6 +74,48 @@ final class MusicLibrary: NSObject, ObservableObject, AVAudioPlayerDelegate {
         observers.forEach { NotificationCenter.default.removeObserver($0) }
         commands.forEach { $0.0.removeTarget($0.1) }
     }
+
+    #if DEBUG
+    func createUITestTrack(id: UUID) throws {
+        let sampleRate: UInt32 = 8000
+        let byteCount: UInt32 = sampleRate * 120 * 2
+        var wav = Data()
+        func ascii(_ string: String) { wav.append(contentsOf: string.utf8) }
+        func u32(_ number: UInt32) { var value = number.littleEndian; withUnsafeBytes(of: &value) { wav.append(contentsOf: $0) } }
+        func u16(_ number: UInt16) { var value = number.littleEndian; withUnsafeBytes(of: &value) { wav.append(contentsOf: $0) } }
+        ascii("RIFF"); u32(byteCount + 36); ascii("WAVEfmt "); u32(16); u16(1); u16(1)
+        u32(sampleRate); u32(sampleRate * 2); u16(2); u16(16); ascii("data"); u32(byteCount)
+        wav.append(Data(repeating: 0, count: Int(byteCount)))
+        let filename = "ui-test.wav"
+        try wav.write(to: directory.appendingPathComponent(filename))
+        var track = Track(id: id, title: "Afterglow", filename: filename)
+        track.artist = "Sample Artist"
+        track.album = "A little light"
+        let text = ["ひとつずつ、歩いていこう", "風の音を聴きながら", "立ち止まる日があっても", "夜の向こうに、小さな灯り", "この音を、持ち帰ろう", "明日へ続く道の途中", "ゆっくりでいいから", "またここから始めよう"]
+        let times: [Double] = [0, 12, 28, 42, 56, 70, 84, 98]
+        track.lyrics = zip(times, text).map { LyricLine(id: UUID(), seconds: $0.0, text: $0.1) }
+        let updated = tracks + [track]
+        try save(updated)
+        tracks = updated
+        let image = UIGraphicsImageRenderer(size: CGSize(width: 600, height: 600)).image { renderer in
+            let context = renderer.cgContext
+            let colors = [UIColor(red: 0.89, green: 0.68, blue: 0.51, alpha: 1).cgColor,
+                          UIColor(red: 0.71, green: 0.45, blue: 0.52, alpha: 1).cgColor,
+                          UIColor(red: 0.33, green: 0.34, blue: 0.48, alpha: 1).cgColor] as CFArray
+            let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colors, locations: [0, 0.5, 1])!
+            context.drawLinearGradient(gradient, start: .zero, end: CGPoint(x: 600, y: 600), options: [])
+            UIColor.white.withAlphaComponent(0.18).setFill()
+            context.fillEllipse(in: CGRect(x: 235, y: -60, width: 410, height: 410))
+            UIColor(red: 0.3, green: 0.25, blue: 0.4, alpha: 0.2).setFill()
+            context.fillEllipse(in: CGRect(x: -90, y: 200, width: 420, height: 420))
+            ("AFTERGLOW" as NSString).draw(at: CGPoint(x: 42, y: 440), withAttributes: [
+                .font: UIFont(name: "Georgia", size: 61) ?? UIFont.systemFont(ofSize: 61), .foregroundColor: UIColor.white])
+            ("A LITTLE LIGHT TO TAKE HOME" as NSString).draw(at: CGPoint(x: 46, y: 520), withAttributes: [
+                .font: UIFont.systemFont(ofSize: 17, weight: .medium), .foregroundColor: UIColor.white, .kern: 2])
+        }
+        if let data = image.jpegData(compressionQuality: 0.9) { try storeArtwork(data, for: id) }
+    }
+    #endif
 
     func importFiles(_ urls: [URL]) async {
         guard !importing else { return }
@@ -147,9 +192,9 @@ final class MusicLibrary: NSObject, ObservableObject, AVAudioPlayerDelegate {
                 }
             }
             guard var latest = tracks.first(where: { $0.id == id }) else { return }
-            if let title, !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { latest.title = title }
-            latest.artist = artist
-            latest.album = album
+            if latest.title == original.title, let title, !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { latest.title = title }
+            if latest.artist == nil { latest.artist = artist }
+            if latest.album == nil { latest.album = album }
             try commitTrack(latest)
             if let imageData { try storeArtwork(imageData, for: id) }
         } catch {

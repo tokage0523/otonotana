@@ -58,7 +58,7 @@ struct LibraryView: View {
                                     if track.isFavorite { Image(systemName: "heart.fill").font(.caption) }
                                     if library.current?.id == track.id { Image(systemName: "waveform").font(.caption) }
                                 }.padding(.vertical, 4)
-                            }.swipeActions {
+                            }.accessibilityIdentifier("track-\(track.id.uuidString)").swipeActions {
                                 Button("削除", role: .destructive) { library.remove(track) }
                             }.swipeActions(edge: .leading) {
                                 Button { library.toggleFavorite(track) } label: {

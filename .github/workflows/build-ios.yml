@@ -44,3 +44,21 @@ jobs:
           name: M4APlayer-unsigned
           path: M4APlayer-unsigned.ipa
           retention-days: 3
+      - name: Verify player screens on iPhone simulator
+        run: |
+          xcrun simctl list devices available -j > "$RUNNER_TEMP/devices.json"
+          device_id=$(python3 -c 'import json,os; d=json.load(open(os.environ["RUNNER_TEMP"]+"/devices.json")); phones=[v for k,vs in d["devices"].items() if "iOS" in k for v in vs if v["name"].startswith("iPhone")]; preferred=[v for v in phones if v["name"] in ["iPhone 15 Pro","iPhone 16 Pro","iPhone 17 Pro"]]; print((preferred or phones)[0]["udid"])')
+          xcodebuild test -project M4APlayer.xcodeproj -scheme M4APlayer -configuration Debug -destination "id=$device_id" -derivedDataPath build -resultBundlePath build/PlayerUI.xcresult CODE_SIGNING_ALLOWED=NO
+      - name: Export screen previews
+        if: always()
+        run: |
+          if [ -d build/PlayerUI.xcresult ]; then
+            xcrun xcresulttool export attachments --path build/PlayerUI.xcresult --output-path build/screenshots
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-player-preview
+          path: build/screenshots
+          if-no-files-found: ignore
+          retention-days: 3

@@ -40,6 +40,7 @@ struct PlayerView: View {
                                     .frame(width: min(max(180, geometry.size.height * 0.43), geometry.size.width - 52))
                                     .shadow(color: .black.opacity(0.22), radius: 20, y: 12)
                                     .accessibilityLabel("\(track.title)のジャケット")
+                                    .accessibilityIdentifier("player-cover")
                                 if lyricsPreview, let line = activeLine, !line.isEmpty {
                                     Text(line).font(.subheadline).multilineTextAlignment(.center)
                                         .foregroundStyle(palette.secondary).lineLimit(2)
@@ -137,6 +138,7 @@ struct PlayerView: View {
                     Toggle("ジャケット下に歌詞を表示", isOn: $lyricsPreview)
                 } label: { Image(systemName: "ellipsis").frame(width: 44, height: 44) }
                     .accessibilityLabel("曲と表示の設定")
+                    .accessibilityIdentifier("player-options")
             }
         }
     }
@@ -145,6 +147,7 @@ struct PlayerView: View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 5) {
                 Text(track.title).font(.title2.bold()).lineLimit(2).minimumScaleFactor(0.8)
+                    .accessibilityIdentifier("player-track-title")
                 if let artist = track.artist, !artist.isEmpty {
                     Text(artist).font(.subheadline).foregroundStyle(palette.secondary).lineLimit(1)
                 }
@@ -153,6 +156,7 @@ struct PlayerView: View {
                    systemImage: track.isFavorite ? "heart.fill" : "heart") { library.toggleFavorite(track) }
                 .labelStyle(.iconOnly).font(.title2).frame(width: 44, height: 44)
                 .foregroundStyle(track.isFavorite ? palette.accent : palette.text)
+                .accessibilityIdentifier("favorite-toggle")
         }
     }
 
@@ -190,6 +194,7 @@ struct PlayerView: View {
                     .frame(width: 52, height: 44)
                     .background(showLyrics ? palette.text.opacity(0.13) : .clear, in: RoundedRectangle(cornerRadius: 12))
             }.accessibilityLabel(showLyrics ? "ジャケットを表示" : "歌詞を表示")
+                .accessibilityIdentifier("lyrics-toggle")
                 .accessibilityValue(showLyrics ? "歌詞表示中" : "ジャケット表示中")
             Spacer()
             AirPlayButton(tint: UIColor(palette.text)).frame(width: 44, height: 44).accessibilityLabel("再生先を選択")
