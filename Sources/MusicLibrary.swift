@@ -2,13 +2,7 @@ import AVFoundation
 import Combine
 import MediaPlayer
 import Foundation
-
-struct Track: Identifiable, Codable, Equatable {
-    let id: UUID
-    let title: String
-    let filename: String
-    var lyrics: [LyricLine]? = nil
-}
+import UIKit
 
 @MainActor
 final class MusicLibrary: NSObject, ObservableObject, AVAudioPlayerDelegate {
@@ -19,6 +13,11 @@ final class MusicLibrary: NSObject, ObservableObject, AVAudioPlayerDelegate {
     @Published private(set) var duration: Double = 0
     @Published private(set) var importing = false
     @Published var message: String?
+    @Published private(set) var artworkImage: UIImage?
+    @Published private(set) var artworkTint = UIColor(red: 0.28, green: 0.23, blue: 0.38, alpha: 1)
+
+    private var artworkCache: [String: UIImage] = [:]
+    private var nowPlayingArtwork: MPMediaItemArtwork?
 
     private var player: AVAudioPlayer?
     private var timer: Timer?
@@ -105,6 +104,7 @@ final class MusicLibrary: NSObject, ObservableObject, AVAudioPlayerDelegate {
                     let updated = tracks + [track]
                     try save(updated)
                     tracks = updated
+                    await readMetadata(for: track.id)
                 } catch {
                     try? FileManager.default.removeItem(at: directory.appendingPathComponent(track.filename))
                     throw error
@@ -116,6 +116,120 @@ final class MusicLibrary: NSObject, ObservableObject, AVAudioPlayerDelegate {
 
     private func save(_ value: [Track]) throws {
         try JSONEncoder().encode(value).write(to: indexURL, options: .atomic)
+    }
+
+    private func commitTrack(_ track: Track) throws {
+        guard let index = tracks.firstIndex(where: { $0.id == track.id }) else { return }
+        var updated = tracks
+        updated[index] = track
+        try save(updated)
+        tracks = updated
+        if current?.id == track.id {
+            current = track
+            loadCurrentArtwork()
+            updateNowPlaying()
+        }
+    }
+
+    private func readMetadata(for id: UUID) async {
+        guard let original = tracks.first(where: { $0.id == id }) else { return }
+        let asset = AVURLAsset(url: directory.appendingPathComponent(original.filename))
+        do {
+            let items = try await asset.load(.commonMetadata)
+            var title: String?, artist: String?, album: String?, imageData: Data?
+            for item in items {
+                switch item.commonKey {
+                case .commonKeyTitle: title = try? await item.load(.stringValue)
+                case .commonKeyArtist: artist = try? await item.load(.stringValue)
+                case .commonKeyAlbumName: album = try? await item.load(.stringValue)
+                case .commonKeyArtwork: imageData = try? await item.load(.dataValue)
+                default: break
+                }
+            }
+            guard var latest = tracks.first(where: { $0.id == id }) else { return }
+            if let title, !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { latest.title = title }
+            latest.artist = artist
+            latest.album = album
+            try commitTrack(latest)
+            if let imageData { try storeArtwork(imageData, for: id) }
+        } catch {
+            // Metadata is optional. The imported audio remains available without it.
+        }
+    }
+
+    func artwork(for track: Track) -> UIImage? {
+        guard let filename = track.artworkFilename else { return nil }
+        if let cached = artworkCache[filename] { return cached }
+        guard let image = UIImage(contentsOfFile: directory.appendingPathComponent(filename).path) else { return nil }
+        artworkCache[filename] = image
+        return image
+    }
+
+    private func loadCurrentArtwork() {
+        artworkImage = current.flatMap { artwork(for: $0) }
+        artworkTint = artworkImage?.averageColor ?? UIColor(red: 0.28, green: 0.23, blue: 0.38, alpha: 1)
+        if let image = artworkImage { nowPlayingArtwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image } }
+        else { nowPlayingArtwork = nil }
+    }
+
+    private func storeArtwork(_ data: Data, for id: UUID) throws {
+        guard var track = tracks.first(where: { $0.id == id }) else { return }
+        guard let original = UIImage(data: data), original.size.width > 0, original.size.height > 0 else {
+            throw NSError(domain: "Artwork", code: 1, userInfo: [NSLocalizedDescriptionKey: "画像を読み込めませんでした。別の画像を選んでください。"])
+        }
+        let scale = min(1, 1200 / max(original.size.width, original.size.height))
+        let size = CGSize(width: original.size.width * scale, height: original.size.height * scale)
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        let image = UIGraphicsImageRenderer(size: size, format: format).image { _ in original.draw(in: CGRect(origin: .zero, size: size)) }
+        guard let jpg = image.jpegData(compressionQuality: 0.9) else { return }
+        let old = track.artworkFilename
+        let filename = "\(id.uuidString)-\(UUID().uuidString).jpg"
+        let url = directory.appendingPathComponent(filename)
+        try jpg.write(to: url, options: .atomic)
+        track.artworkFilename = filename
+        do { try commitTrack(track) }
+        catch { try? FileManager.default.removeItem(at: url); throw error }
+        if let old {
+            artworkCache.removeValue(forKey: old)
+            try? FileManager.default.removeItem(at: directory.appendingPathComponent(old))
+        }
+    }
+
+    func setArtwork(_ data: Data, for id: UUID) {
+        do { try storeArtwork(data, for: id) }
+        catch { message = error.localizedDescription }
+    }
+
+    func removeArtwork(for id: UUID) {
+        guard var track = tracks.first(where: { $0.id == id }) else { return }
+        let old = track.artworkFilename
+        track.artworkFilename = nil
+        do {
+            try commitTrack(track)
+            if let old {
+                artworkCache.removeValue(forKey: old)
+                try? FileManager.default.removeItem(at: directory.appendingPathComponent(old))
+            }
+        } catch { message = "ジャケットを変更できませんでした：\(error.localizedDescription)" }
+    }
+
+    func updateDetails(for id: UUID, title: String, artist: String, album: String) {
+        guard var track = tracks.first(where: { $0.id == id }) else { return }
+        let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanTitle.isEmpty else { message = "曲名を入力してください。"; return }
+        track.title = cleanTitle
+        track.artist = artist.trimmingCharacters(in: .whitespacesAndNewlines)
+        track.album = album.trimmingCharacters(in: .whitespacesAndNewlines)
+        do { try commitTrack(track) }
+        catch { message = "曲の情報を保存できませんでした：\(error.localizedDescription)" }
+    }
+
+    func toggleFavorite(_ track: Track) {
+        guard var latest = tracks.first(where: { $0.id == track.id }) else { return }
+        latest.favorite = !latest.isFavorite
+        do { try commitTrack(latest) }
+        catch { message = "お気に入りを保存できませんでした：\(error.localizedDescription)" }
     }
 
     func importLyrics(_ url: URL, for trackID: UUID) async {
@@ -152,6 +266,10 @@ final class MusicLibrary: NSObject, ObservableObject, AVAudioPlayerDelegate {
             tracks = updated
             if current?.id == track.id { stop() }
             try FileManager.default.removeItem(at: directory.appendingPathComponent(track.filename))
+            if let filename = track.artworkFilename {
+                artworkCache.removeValue(forKey: filename)
+                try? FileManager.default.removeItem(at: directory.appendingPathComponent(filename))
+            }
         } catch { message = "削除できませんでした：\(error.localizedDescription)" }
     }
 
@@ -164,6 +282,7 @@ final class MusicLibrary: NSObject, ObservableObject, AVAudioPlayerDelegate {
             timer?.invalidate()
             player = next
             current = track
+            loadCurrentArtwork()
             position = 0
             duration = next.duration
             playing = false
@@ -213,6 +332,8 @@ final class MusicLibrary: NSObject, ObservableObject, AVAudioPlayerDelegate {
         player?.stop()
         player = nil
         current = nil
+        artworkImage = nil
+        nowPlayingArtwork = nil
         playing = false
         position = 0
         duration = 0
@@ -258,12 +379,16 @@ final class MusicLibrary: NSObject, ObservableObject, AVAudioPlayerDelegate {
 
     private func updateNowPlaying() {
         guard let current else { return }
-        MPNowPlayingInfoCenter.default().nowPlayingInfo = [
+        var info: [String: Any] = [
             MPMediaItemPropertyTitle: current.title,
             MPMediaItemPropertyPlaybackDuration: duration,
             MPNowPlayingInfoPropertyElapsedPlaybackTime: position,
             MPNowPlayingInfoPropertyPlaybackRate: playing ? 1.0 : 0.0
         ]
+        if let artist = current.artist { info[MPMediaItemPropertyArtist] = artist }
+        if let album = current.album { info[MPMediaItemPropertyAlbumTitle] = album }
+        if let artwork = nowPlayingArtwork { info[MPMediaItemPropertyArtwork] = artwork }
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = info
         let index = tracks.firstIndex(where: { $0.id == current.id }) ?? 0
         MPRemoteCommandCenter.shared().nextTrackCommand.isEnabled = index + 1 < tracks.count
         MPRemoteCommandCenter.shared().previousTrackCommand.isEnabled = true

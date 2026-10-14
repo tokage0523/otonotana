@@ -15,3 +15,17 @@ do {
     fatalError("Failed: invalid timestamps must be rejected")
 } catch {}
 print("Swift LRC parser checks passed.")
+
+let legacy = #"{"id":"00000000-0000-0000-0000-000000000001","title":"既存の曲","filename":"legacy.m4a"}"#
+let oldTrack = try JSONDecoder().decode(Track.self, from: Data(legacy.utf8))
+check(oldTrack.title == "既存の曲" && oldTrack.lyrics == nil, "legacy library migration")
+check(oldTrack.artist == nil && oldTrack.artworkFilename == nil && !oldTrack.isFavorite, "missing optional metadata defaults")
+var edited = oldTrack
+edited.artist = "アーティスト"
+edited.album = "アルバム"
+edited.artworkFilename = "cover.jpg"
+edited.favorite = true
+edited.lyrics = lines
+let restored = try JSONDecoder().decode(Track.self, from: JSONEncoder().encode(edited))
+check(restored == edited && restored.isFavorite, "artwork metadata and lyrics round trip")
+print("Library compatibility and metadata checks passed.")

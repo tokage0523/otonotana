@@ -22,7 +22,7 @@ jobs:
       - name: Check lyric formats
         run: |
           node PCEditor/lyrics-core.test.cjs
-          swiftc Sources/Lyrics.swift Checks/main.swift -o "$RUNNER_TEMP/check-lyrics"
+          swiftc Sources/Lyrics.swift Sources/Track.swift Checks/main.swift -o "$RUNNER_TEMP/check-lyrics"
           "$RUNNER_TEMP/check-lyrics"
       - name: Generate Xcode project
         run: |
