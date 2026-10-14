@@ -23,11 +23,14 @@ final class PlayerUITests: XCTestCase {
         capture(app, "02-lyrics-follow-on")
         follow.tap()
         XCTAssertEqual(follow.value as? String, "オフ")
-        app.buttons["lyric-42.0"].tap()
+        app.buttons["lyric-28.0"].tap()
         XCTAssertTrue(app.buttons["player-play-pause"].waitForExistence(timeout: 5))
         XCTAssertEqual(app.buttons["player-play-pause"].label, "一時停止")
-        XCTAssertTrue(app.staticTexts["0:42"].exists)
         app.buttons["player-play-pause"].tap()
+        // Playback keeps advancing while XCTest queries the screen. Verify the
+        // selected section after pausing instead of expecting an exact second.
+        let selectedSectionTime = NSPredicate(format: "label MATCHES %@", "^0:(2[89]|3[0-9]|4[01])$")
+        XCTAssertTrue(app.staticTexts.matching(selectedSectionTime).firstMatch.exists)
         capture(app, "03-lyrics-follow-off")
 
         // Browsing earlier lyrics must stay possible when auto-scroll is disabled.
