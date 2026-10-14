@@ -1,6 +1,79 @@
 import XCTest
 
 final class PlayerUITests: XCTestCase {
+    func testModePaddingAndSeekBarTapAndDrag() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-fixture", "--reset-ui-preferences"]
+        app.launch()
+        let albums = app.buttons["mode-アルバム"]
+        XCTAssertTrue(albums.waitForExistence(timeout: 15))
+        // These physical taps are in empty padding, outside the glyphs.
+        albums.coordinate(withNormalizedOffset: CGVector(dx: 0.08, dy: 0.5)).tap()
+        XCTAssertTrue(app.staticTexts["A little light"].waitForExistence(timeout: 5))
+        app.buttons["mode-曲"].coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.5)).tap()
+        let row = app.buttons["track-00000000-0000-0000-0000-000000000002"]
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        row.tap()
+        let seek = app.descendants(matching: .any).matching(identifier: "seek-bar").firstMatch
+        XCTAssertTrue(seek.waitForExistence(timeout: 5))
+        XCTAssertEqual(app.buttons["player-play-pause"].label, "再生")
+        // A 120-second fixture: the center is exactly 60 seconds.
+        seek.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        XCTAssertTrue(app.staticTexts["1:00"].exists)
+        XCTAssertEqual(app.buttons["player-play-pause"].label, "再生")
+        // Pick up the thumb and drag it towards the right, then back left.
+        seek.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            .press(forDuration: 0.1, thenDragTo: seek.coordinate(withNormalizedOffset: CGVector(dx: 0.75, dy: 0.5)))
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label MATCHES %@", "^1:3[0-3]$")).firstMatch.exists)
+        seek.coordinate(withNormalizedOffset: CGVector(dx: 0.75, dy: 0.5))
+            .press(forDuration: 0.1, thenDragTo: seek.coordinate(withNormalizedOffset: CGVector(dx: 0.25, dy: 0.5)))
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label MATCHES %@", "^0:2[6-9]$")).firstMatch.exists)
+        // A tap during playback seeks without pausing it.
+        app.buttons["player-play-pause"].tap()
+        seek.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        app.buttons["player-play-pause"].tap()
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label MATCHES %@", "^1:0[0-5]$")).firstMatch.exists)
+        capture(app, "12-seek-bar")
+    }
+
+    func testAppAppearanceChangesAndPersists() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-fixture", "--reset-ui-preferences"]
+        app.launch()
+        func choose(_ name: String) {
+            app.buttons["tab-設定"].tap()
+            app.buttons["settings-appearance"].tap()
+            app.staticTexts[name].firstMatch.tap()
+            if !app.buttons["settings-appearance"].exists { app.navigationBars.buttons.element(boundBy: 0).tap() }
+            app.buttons["tab-ライブラリ"].tap()
+            XCTAssertTrue(app.buttons["mode-曲"].waitForExistence(timeout: 5))
+        }
+        func backgroundPixels() -> Data? {
+            guard let image = app.screenshot().image.cgImage else { return nil }
+            let region = CGRect(x: CGFloat(image.width) * 0.45, y: CGFloat(image.height) * 0.58, width: 10, height: 10)
+            return image.cropping(to: region)?.dataProvider?.data as Data?
+        }
+        choose("ダーク")
+        let dark = backgroundPixels()
+        XCTAssertNotNil(dark)
+        capture(app, "13-dark-library")
+        choose("ライト")
+        let light = backgroundPixels()
+        XCTAssertNotNil(light)
+        XCTAssertNotEqual(dark, light)
+        capture(app, "14-light-library")
+        app.terminate(); app.launchArguments = ["--ui-test-fixture"]; app.launch()
+        XCTAssertTrue(app.buttons["mode-曲"].waitForExistence(timeout: 15))
+        XCTAssertEqual(backgroundPixels(), light)
+        choose("本体設定に合わせる")
+        app.buttons["tab-設定"].tap()
+        let picker = app.buttons["settings-appearance"]
+        XCTAssertTrue((picker.label + " " + (picker.value as? String ?? "")).contains("本体設定に合わせる"))
+        capture(app, "15-appearance-settings")
+    }
+
     func testAlbumCoversAndTitlesAlignForDifferentTitleLengths() throws {
         continueAfterFailure = false
         let app = XCUIApplication()

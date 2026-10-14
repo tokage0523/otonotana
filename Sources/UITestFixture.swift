@@ -7,6 +7,7 @@ extension MusicLibrary {
         if ProcessInfo.processInfo.arguments.contains("--reset-ui-preferences") {
             UserDefaults.standard.removeObject(forKey: "lyricsAutoScroll")
             UserDefaults.standard.removeObject(forKey: "playerTheme")
+            UserDefaults.standard.removeObject(forKey: "appAppearance")
             UserDefaults.standard.removeObject(forKey: "lyricsTimestamps")
             UserDefaults.standard.removeObject(forKey: "lyricsSize")
             if shuffleEnabled { toggleShuffle() }

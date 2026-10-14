@@ -49,7 +49,7 @@ struct PlayerView: View {
             .background(LinearGradient(colors: [palette.top, palette.bottom], startPoint: .top, endPoint: .bottom).ignoresSafeArea())
             .foregroundStyle(palette.text)
         }
-        .preferredColorScheme(theme == .paper ? .light : .dark)
+        .environment(\.colorScheme, theme == .paper ? .light : .dark)
         .presentationDragIndicator(.visible)
         .sheet(isPresented: $showQueue) { queue }
         .sheet(item: $detailsTrack) { TrackDetailsView(track: $0).environmentObject(library) }
@@ -297,11 +297,11 @@ private struct PlayerProgressView: View {
     @State private var scrubbing = false
     var body: some View {
         VStack(spacing: 2) {
-            Slider(value: Binding(get: { scrubbing ? scrubPosition : clock.position }, set: { scrubPosition = $0 }),
-                   in: 0...max(library.duration, 0.01), onEditingChanged: { editing in
+            SeekBar(value: Binding(get: { scrubbing ? scrubPosition : clock.position }, set: { scrubPosition = $0 }),
+                    duration: library.duration, tint: palette.accent, onEditingChanged: { editing in
                 if editing { scrubPosition = clock.position; scrubbing = true }
                 else { scrubbing = false; library.seek(scrubPosition) }
-            }).tint(palette.accent).accessibilityLabel("再生位置")
+            })
             HStack {
                 Text(time(scrubbing ? scrubPosition : clock.position))
                 Spacer()

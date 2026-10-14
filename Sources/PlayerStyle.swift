@@ -1,6 +1,25 @@
 import SwiftUI
 import UIKit
 
+enum AppAppearance: String, CaseIterable, Identifiable {
+    case system, light, dark
+    var id: String { rawValue }
+    var name: String {
+        switch self {
+        case .system: return "本体設定に合わせる"
+        case .light: return "ライト"
+        case .dark: return "ダーク"
+        }
+    }
+    var colorScheme: ColorScheme? {
+        switch self {
+        case .system: return nil
+        case .light: return .light
+        case .dark: return .dark
+        }
+    }
+}
+
 enum PlayerTheme: String, CaseIterable, Identifiable {
     case artwork, midnight, paper
     var id: String { rawValue }

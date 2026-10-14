@@ -47,6 +47,7 @@ struct LibraryView: View {
                         } label: {
                             Text(item.title).font(.subheadline.weight(.semibold)).frame(minWidth: 0, maxWidth: .infinity).padding(.vertical, 11)
                                 .background(mode == item ? Color(.secondarySystemGroupedBackground) : .clear, in: RoundedRectangle(cornerRadius: 11))
+                                .contentShape(Rectangle())
                         }.buttonStyle(.plain).foregroundStyle(mode == item ? Color.indigo : .secondary)
                             .accessibilityIdentifier("mode-\(item.title)").accessibilityAddTraits(mode == item ? .isSelected : [])
                     }
@@ -105,7 +106,7 @@ struct LibraryView: View {
                                             .frame(maxWidth: .infinity, alignment: .leading).accessibilityIdentifier("album-title-\(album.id)")
                                         Text(album.artist).font(.caption).foregroundStyle(.secondary).lineLimit(1, reservesSpace: true)
                                             .frame(maxWidth: .infinity, alignment: .leading)
-                                    }.frame(maxWidth: .infinity, alignment: .topLeading)
+                                    }.frame(maxWidth: .infinity, alignment: .topLeading).contentShape(Rectangle())
                                 }.buttonStyle(.plain).accessibilityIdentifier("album-\(album.id)")
                             }
                         }

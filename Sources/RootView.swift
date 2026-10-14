@@ -8,6 +8,7 @@ enum AppTab: String, CaseIterable {
 struct RootView: View {
     @EnvironmentObject private var library: MusicLibrary
     @Environment(\.scenePhase) private var scenePhase
+    @AppStorage("appAppearance") private var appearance = AppAppearance.system.rawValue
     @State private var tab: AppTab = .library
 
     var body: some View {
@@ -31,6 +32,7 @@ struct RootView: View {
                 }
             }.padding(.horizontal, 12)
         }.background(Color(.systemGroupedBackground)).tint(.indigo)
+            .preferredColorScheme((AppAppearance(rawValue: appearance) ?? .system).colorScheme)
             .sheet(isPresented: $library.playerPresented) { PlayerView().environmentObject(library) }
             .alert("お知らせ", isPresented: Binding(get: { library.message != nil && !library.playerPresented },
                                                   set: { if !$0 { library.message = nil } })) {
@@ -72,6 +74,7 @@ struct EqualPlayerButtonStyle: ButtonStyle {
 struct SettingsView: View {
     @EnvironmentObject private var library: MusicLibrary
     @AppStorage("playerTheme") private var theme = PlayerTheme.artwork.rawValue
+    @AppStorage("appAppearance") private var appearance = AppAppearance.system.rawValue
     @AppStorage("lyricsTimestamps") private var timestamps = false
     @AppStorage("lyricsPreview") private var preview = true
     @State private var refreshing = false
@@ -79,7 +82,10 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 Section("表示") {
-                    Picker("テーマ", selection: $theme) { ForEach(PlayerTheme.allCases) { Text($0.name).tag($0.rawValue) } }
+                    Picker("アプリの外観", selection: $appearance) {
+                        ForEach(AppAppearance.allCases) { Text($0.name).tag($0.rawValue).accessibilityIdentifier("appearance-\($0.rawValue)") }
+                    }.pickerStyle(.navigationLink).accessibilityIdentifier("settings-appearance")
+                    Picker("再生画面のテーマ", selection: $theme) { ForEach(PlayerTheme.allCases) { Text($0.name).tag($0.rawValue) } }
                     Toggle("ジャケットの下に歌詞を表示", isOn: $preview)
                 }
                 Section("歌詞") {
@@ -98,7 +104,7 @@ struct SettingsView: View {
                     } label: { HStack { Text("共有ファイルを再読み込み"); if refreshing { ProgressView() } } }
                         .disabled(refreshing).accessibilityIdentifier("rescan-shared-files")
                 }
-                Section { Text("音の棚 0.3").foregroundStyle(.secondary) }
+                Section { Text("音の棚 0.3.2").foregroundStyle(.secondary) }
             }.navigationTitle("設定")
         }
     }
