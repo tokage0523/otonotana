@@ -328,6 +328,17 @@ final class MusicLibrary: NSObject, ObservableObject, AVAudioPlayerDelegate {
                         await readMetadata(for: id)
                     }
                     await updateSidecars(audio: url, id: id)
+                    #if DEBUG
+                    if ProcessInfo.processInfo.arguments.contains("--shared-test-fixture"), path == "Shared test.wav" {
+                        let registered = tracks.filter { $0.sharedPath == path }
+                        assert(registered.count == 1, "Repeated shared scans must not duplicate tracks")
+                        assert(audioURL(for: registered[0]).standardizedFileURL == url.standardizedFileURL,
+                               "Shared playback must use the received file directly")
+                        assert(!FileManager.default.fileExists(atPath: directory.appendingPathComponent("Shared test.wav").path),
+                               "Shared registration must not make a private audio copy")
+                        assert(registered[0].lyrics?.count == 2, "Matching LRC should be registered")
+                    }
+                    #endif
                 } catch {
                     failedStamps[path] = stamp
                     message = "\(url.lastPathComponent)を登録できませんでした。転送完了後に設定の再読み込みを試してください。"

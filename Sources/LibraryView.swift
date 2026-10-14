@@ -45,7 +45,7 @@ struct LibraryView: View {
                             forward = item.rawValue > mode.rawValue
                             withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.24)) { mode = item }
                         } label: {
-                            Text(item.title).font(.subheadline.weight(.semibold)).frame(maxWidth: .infinity).padding(.vertical, 11)
+                            Text(item.title).font(.subheadline.weight(.semibold)).frame(minWidth: 0, maxWidth: .infinity).padding(.vertical, 11)
                                 .background(mode == item ? Color(.secondarySystemGroupedBackground) : .clear, in: RoundedRectangle(cornerRadius: 11))
                         }.buttonStyle(.plain).foregroundStyle(mode == item ? Color.indigo : .secondary)
                             .accessibilityIdentifier("mode-\(item.title)").accessibilityAddTraits(mode == item ? .isSelected : [])
@@ -160,7 +160,13 @@ struct AlbumDetailView: View {
     @EnvironmentObject private var library: MusicLibrary
     let albumID: String
     @State private var editing = false
-    private var album: AlbumGroup? { library.albums.first { $0.id == albumID } }
+    @State private var anchorTrackID: UUID?
+    private var album: AlbumGroup? {
+        library.albums.first { $0.id == albumID } ?? library.albums.first { group in
+            if let anchorTrackID { return group.tracks.contains { $0.id == anchorTrackID } }
+            return false
+        }
+    }
     var body: some View {
         Group {
             if let album {
@@ -175,8 +181,8 @@ struct AlbumDetailView: View {
                             }
                         }.padding(.vertical, 10)
                         HStack(spacing: 12) {
-                            Button("再生", systemImage: "play.fill") { start(album, shuffled: false) }.frame(maxWidth: .infinity)
-                            Button("シャッフル", systemImage: "shuffle") { start(album, shuffled: true) }.frame(maxWidth: .infinity)
+                            Button("再生", systemImage: "play.fill") { start(album, shuffled: false) }.frame(minWidth: 0, maxWidth: .infinity)
+                            Button("シャッフル", systemImage: "shuffle") { start(album, shuffled: true) }.frame(minWidth: 0, maxWidth: .infinity)
                         }.buttonStyle(.bordered).padding(.vertical, 4)
                     }
                     Section("収録曲") { ForEach(album.tracks) { TrackRow(track: $0, context: album.tracks) } }
@@ -188,6 +194,7 @@ struct AlbumDetailView: View {
                     }
             } else { ContentUnavailableView("アルバムがありません", systemImage: "square.stack") }
         }
+        .onAppear { if anchorTrackID == nil { anchorTrackID = album?.tracks.first?.id } }
     }
     private func start(_ album: AlbumGroup, shuffled: Bool) {
         if library.shuffleEnabled != shuffled { library.toggleShuffle() }

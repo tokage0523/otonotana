@@ -182,22 +182,22 @@ struct PlayerView: View {
             Button { library.toggleShuffle() } label: {
                 Image(systemName: "shuffle").font(.system(size: 20))
                     .foregroundStyle(palette.text.opacity(library.shuffleEnabled ? 1 : 0.45))
-                    .frame(maxWidth: .infinity).frame(height: 64).contentShape(Rectangle())
+                    .frame(minWidth: 0, maxWidth: .infinity).frame(height: 64).contentShape(Rectangle())
             }.accessibilityLabel("シャッフル").accessibilityValue(library.shuffleEnabled ? "オン" : "オフ").accessibilityIdentifier("player-shuffle")
             Button { library.previous() } label: {
-                Image(systemName: "backward.end.fill").font(.system(size: 27)).frame(maxWidth: .infinity).frame(height: 64).contentShape(Rectangle())
+                Image(systemName: "backward.end.fill").font(.system(size: 27)).frame(minWidth: 0, maxWidth: .infinity).frame(height: 64).contentShape(Rectangle())
             }.accessibilityLabel("前の曲")
             Button { library.toggle() } label: {
                 Image(systemName: library.playing ? "pause.fill" : "play.fill").font(.system(size: 40))
-                    .frame(maxWidth: .infinity).frame(height: 64).contentShape(Rectangle())
+                    .frame(minWidth: 0, maxWidth: .infinity).frame(height: 64).contentShape(Rectangle())
             }.accessibilityLabel(library.playing ? "一時停止" : "再生").accessibilityIdentifier("player-play-pause")
             Button { library.next() } label: {
-                Image(systemName: "forward.end.fill").font(.system(size: 27)).frame(maxWidth: .infinity).frame(height: 64).contentShape(Rectangle())
+                Image(systemName: "forward.end.fill").font(.system(size: 27)).frame(minWidth: 0, maxWidth: .infinity).frame(height: 64).contentShape(Rectangle())
             }.accessibilityLabel("次の曲").disabled(!library.canGoNext)
             Button { library.cycleRepeat() } label: {
                 Image(systemName: library.repeatMode == .one ? "repeat.1" : "repeat").font(.system(size: 20))
                     .foregroundStyle(palette.text.opacity(library.repeatMode == .off ? 0.45 : 1))
-                    .frame(maxWidth: .infinity).frame(height: 64).contentShape(Rectangle())
+                    .frame(minWidth: 0, maxWidth: .infinity).frame(height: 64).contentShape(Rectangle())
             }.accessibilityLabel(library.repeatMode.label).accessibilityIdentifier("player-repeat")
         }.buttonStyle(.plain)
     }
@@ -208,12 +208,12 @@ struct PlayerView: View {
                 Image(systemName: showLyrics ? "quote.bubble.fill" : "quote.bubble").font(.title2)
                     .frame(width: 48, height: 44)
                     .background(showLyrics ? palette.text.opacity(0.13) : .clear, in: RoundedRectangle(cornerRadius: 12))
-                    .frame(maxWidth: .infinity).contentShape(Rectangle())
+                    .frame(minWidth: 0, maxWidth: .infinity).contentShape(Rectangle())
             }.accessibilityLabel(showLyrics ? "ジャケットを表示" : "歌詞を表示")
                 .accessibilityIdentifier("lyrics-toggle").accessibilityValue(showLyrics ? "歌詞表示中" : "ジャケット表示中")
-            AirPlayButton(tint: UIColor(palette.text)).frame(width: 44, height: 44).frame(maxWidth: .infinity).accessibilityLabel("再生先を選択")
+            AirPlayButton(tint: UIColor(palette.text)).frame(width: 44, height: 44).frame(minWidth: 0, maxWidth: .infinity).accessibilityLabel("再生先を選択")
             Button { showQueue = true } label: {
-                Image(systemName: "list.bullet").font(.title2).frame(width: 48, height: 44).frame(maxWidth: .infinity).contentShape(Rectangle())
+                Image(systemName: "list.bullet").font(.title2).frame(width: 48, height: 44).frame(minWidth: 0, maxWidth: .infinity).contentShape(Rectangle())
             }.accessibilityLabel("再生する曲一覧")
         }.buttonStyle(.plain)
     }

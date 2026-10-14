@@ -25,7 +25,7 @@ struct RootView: View {
                             Image(systemName: item.icon).font(.system(size: 21))
                             Text(item.rawValue).font(.caption2)
                         }.foregroundStyle(tab == item ? Color.indigo : Color.secondary)
-                            .frame(maxWidth: .infinity).frame(minHeight: 58).contentShape(Rectangle())
+                            .frame(minWidth: 0, maxWidth: .infinity).frame(minHeight: 58).contentShape(Rectangle())
                     }.buttonStyle(.plain).accessibilityIdentifier("tab-\(item.rawValue)")
                         .accessibilityAddTraits(tab == item ? .isSelected : [])
                 }

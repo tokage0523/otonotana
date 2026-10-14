@@ -26,7 +26,7 @@ struct LyricsView: View {
                     ForEach(0..<3) { index in
                         Button { size = index } label: {
                             Text(["小", "標準", "大"][index]).font(.caption.weight(.semibold))
-                                .frame(maxWidth: .infinity).frame(minHeight: 44)
+                                .frame(minWidth: 0, maxWidth: .infinity).frame(minHeight: 44)
                                 .background(size == index ? palette.text.opacity(0.18) : .clear, in: Capsule())
                         }.buttonStyle(.plain).accessibilityIdentifier("lyrics-size-\(index)")
                             .accessibilityLabel("歌詞の文字サイズ \(["小", "標準", "大"][index])")

@@ -35,7 +35,7 @@ struct AlbumGroup: Identifiable {
             }
             let record = manual.first { $0.id == ordered[0].albumID }
             return AlbumGroup(id: key, title: record?.title ?? ordered[0].album?.nonEmpty ?? ordered[0].title,
-                              artist: record?.artist ?? ordered[0].albumArtist?.nonEmpty ?? ordered[0].artist?.nonEmpty ?? "アーティスト未設定", tracks: ordered)
+                              artist: record?.artist.nonEmpty ?? ordered[0].albumArtist?.nonEmpty ?? ordered[0].artist?.nonEmpty ?? "アーティスト未設定", tracks: ordered)
         }.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
     }
 }
