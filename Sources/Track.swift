@@ -18,6 +18,7 @@ struct Track: Identifiable, Codable, Equatable {
     var lyricsStamp: String? = nil
     var imageStamp: String? = nil
     var addedAt: Date? = nil
+    var metadataVersion: Int? = nil
 
     var isFavorite: Bool { favorite ?? false }
 }

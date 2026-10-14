@@ -186,7 +186,7 @@ final class MusicLibrary: NSObject, ObservableObject, AVAudioPlayerDelegate {
                     let updated = tracks + [track]
                     try save(updated)
                     tracks = updated
-                    await readMetadata(for: track.id)
+                    await readMetadata(for: track.id, replaceTitle: true)
                 } catch {
                     // Keep the received audio available for retry if the index cannot be saved.
                     throw error
@@ -325,8 +325,9 @@ final class MusicLibrary: NSObject, ObservableObject, AVAudioPlayerDelegate {
                         var track = Track(id: UUID(), title: url.deletingPathExtension().lastPathComponent, filename: url.lastPathComponent)
                         track.sharedPath = path; track.fileStamp = stamp; track.addedAt = Date(); id = track.id
                         let updated = tracks + [track]; try save(updated); tracks = updated
-                        await readMetadata(for: id)
+                        await readMetadata(for: id, replaceTitle: true)
                     }
+                    if tracks.first(where: { $0.id == id })?.metadataVersion != 3 { await readMetadata(for: id) }
                     await updateSidecars(audio: url, id: id)
                     #if DEBUG
                     if ProcessInfo.processInfo.arguments.contains("--shared-test-fixture"), path == "Shared test.wav" {
@@ -393,7 +394,7 @@ final class MusicLibrary: NSObject, ObservableObject, AVAudioPlayerDelegate {
         }
     }
 
-    private func readMetadata(for id: UUID) async {
+    private func readMetadata(for id: UUID, replaceTitle: Bool = false) async {
         guard let original = tracks.first(where: { $0.id == id }) else { return }
         let asset = AVURLAsset(url: audioURL(for: original))
         do {
@@ -425,14 +426,15 @@ final class MusicLibrary: NSObject, ObservableObject, AVAudioPlayerDelegate {
                 }
             }
             guard var latest = tracks.first(where: { $0.id == id }) else { return }
-            if latest.title == original.title, let title, !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { latest.title = title }
+            if replaceTitle, latest.title == original.title, let title, !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { latest.title = title }
             if latest.artist == nil { latest.artist = artist }
             if latest.album == nil { latest.album = album }
             if latest.albumArtist == nil { latest.albumArtist = albumArtist }
             if latest.trackNumber == nil { latest.trackNumber = trackNumber }
             if latest.discNumber == nil { latest.discNumber = discNumber }
+            latest.metadataVersion = 3
             try commitTrack(latest)
-            if let imageData { try storeArtwork(imageData, for: id) }
+            if let imageData, latest.artworkFilename == nil { try storeArtwork(imageData, for: id) }
         } catch {
             // Metadata is optional. The imported audio remains available without it.
         }
