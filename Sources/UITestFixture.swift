@@ -17,6 +17,16 @@ extension MusicLibrary {
             if !tracks.contains(where: { $0.id == id }) {
                 try createUITestTrack(id: id)
             }
+            let layoutFixture = ProcessInfo.processInfo.arguments.contains("--album-layout-fixture")
+            let albumName = layoutFixture ? "A very long album title that must occupy two full lines" : "A little light"
+            if tracks.first(where: { $0.id == id })?.album != albumName {
+                updateDetails(for: id, title: "Afterglow", artist: "Sample Artist", album: albumName)
+            }
+            if layoutFixture {
+                let otherID = UUID(uuidString: "00000000-0000-0000-0000-000000000003")!
+                if !tracks.contains(where: { $0.id == otherID }) { try createUITestTrack(id: otherID) }
+                updateDetails(for: otherID, title: "Other sample", artist: "Sample Artist", album: "Short")
+            }
             if let track = tracks.first(where: { $0.id == id }) { select(track); pause(); seek(42) }
             if ProcessInfo.processInfo.arguments.contains("--shared-test-fixture"), let track = tracks.first(where: { $0.id == id }) {
                 let target = sharedDirectory.appendingPathComponent("Shared test.wav")

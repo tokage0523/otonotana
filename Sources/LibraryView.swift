@@ -94,14 +94,18 @@ struct LibraryView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
                         Text("\(visibleAlbums.count)アルバム").font(.caption).foregroundStyle(.secondary)
-                        LazyVGrid(columns: [GridItem(.flexible(), spacing: 18), GridItem(.flexible(), spacing: 18)], spacing: 22) {
+                        LazyVGrid(columns: [GridItem(.flexible(), spacing: 18, alignment: .top), GridItem(.flexible(), spacing: 18, alignment: .top)], spacing: 22) {
                             ForEach(visibleAlbums) { album in
                                 NavigationLink { AlbumDetailView(albumID: album.id) } label: {
                                     VStack(alignment: .leading, spacing: 6) {
                                         CoverView(image: album.artworkTrack.flatMap { library.artwork(for: $0) }, cornerRadius: 15)
-                                        Text(album.title).font(.subheadline.bold()).lineLimit(2).foregroundStyle(.primary)
-                                        Text(album.artist).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                                    }
+                                            .accessibilityElement(children: .ignore).accessibilityLabel("\(album.title)のジャケット")
+                                            .accessibilityIdentifier("album-cover-\(album.id)")
+                                        Text(album.title).font(.subheadline.bold()).lineLimit(2, reservesSpace: true).foregroundStyle(.primary)
+                                            .frame(maxWidth: .infinity, alignment: .leading).accessibilityIdentifier("album-title-\(album.id)")
+                                        Text(album.artist).font(.caption).foregroundStyle(.secondary).lineLimit(1, reservesSpace: true)
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                    }.frame(maxWidth: .infinity, alignment: .topLeading)
                                 }.buttonStyle(.plain).accessibilityIdentifier("album-\(album.id)")
                             }
                         }

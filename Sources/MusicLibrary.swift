@@ -113,7 +113,7 @@ final class MusicLibrary: NSObject, ObservableObject, AVAudioPlayerDelegate {
         ascii("RIFF"); u32(byteCount + 36); ascii("WAVEfmt "); u32(16); u16(1); u16(1)
         u32(sampleRate); u32(sampleRate * 2); u16(2); u16(16); ascii("data"); u32(byteCount)
         wav.append(Data(repeating: 0, count: Int(byteCount)))
-        let filename = "ui-test.wav"
+        let filename = "ui-test-\(id.uuidString).wav"
         try wav.write(to: directory.appendingPathComponent(filename))
         var track = Track(id: id, title: "Afterglow", filename: filename)
         track.artist = "Sample Artist"

@@ -1,6 +1,47 @@
 import XCTest
 
 final class PlayerUITests: XCTestCase {
+    func testAlbumCoversAndTitlesAlignForDifferentTitleLengths() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-fixture", "--album-layout-fixture"]
+        app.launch()
+        app.buttons["mode-アルバム"].tap()
+        let covers = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "album-cover-"))
+        XCTAssertEqual(covers.count, 2)
+        XCTAssertEqual(covers.element(boundBy: 0).frame.minY, covers.element(boundBy: 1).frame.minY, accuracy: 1)
+        XCTAssertEqual(covers.element(boundBy: 0).frame.height, covers.element(boundBy: 1).frame.height, accuracy: 1)
+        let titles = app.staticTexts.matching(NSPredicate(format: "identifier BEGINSWITH %@", "album-title-"))
+        XCTAssertEqual(titles.count, 2)
+        XCTAssertEqual(titles.element(boundBy: 0).frame.minY, titles.element(boundBy: 1).frame.minY, accuracy: 1)
+        XCTAssertEqual(titles.element(boundBy: 0).frame.height, titles.element(boundBy: 1).frame.height, accuracy: 1)
+        capture(app, "10-album-alignment")
+    }
+
+    func testPlayerMenuRemainsStableDuringPlaybackAndActionsWork() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-fixture"]
+        app.launch()
+        app.buttons["track-00000000-0000-0000-0000-000000000002"].tap()
+        app.buttons["player-play-pause"].tap()
+        app.buttons["player-options"].tap()
+        let action = app.buttons["曲の情報を編集"]
+        XCTAssertTrue(action.waitForExistence(timeout: 5))
+        let before = action.frame
+        let first = action.screenshot().image.cgImage?.dataProvider?.data
+        Thread.sleep(forTimeInterval: 0.8)
+        let later = action.screenshot().image.cgImage?.dataProvider?.data
+        XCTAssertEqual(action.frame, before)
+        XCTAssertNotNil(first); XCTAssertNotNil(later)
+        XCTAssertEqual(first as Data?, later as Data?)
+        capture(app, "11-player-menu")
+        action.tap()
+        XCTAssertTrue(app.textFields["曲名"].waitForExistence(timeout: 5))
+        app.buttons["キャンセル"].tap()
+        XCTAssertTrue(app.buttons["lyrics-toggle"].waitForExistence(timeout: 5))
+    }
+
     func testArtworkLyricsControlsAndPreferencesPersist() throws {
         continueAfterFailure = false
         let app = XCUIApplication()

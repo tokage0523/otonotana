@@ -125,22 +125,15 @@ struct PlayerView: View {
             Spacer()
             if photoLoading { ProgressView().tint(palette.text).frame(width: 44) }
             else {
-                Menu {
-                    Button("写真からジャケットを選ぶ", systemImage: "photo") {
-                        importTarget = library.current?.id; showPhotos = true
+                PlayerOptionsMenu(trackID: library.current?.id, hasArtwork: library.current?.artworkFilename != nil) { action in
+                    switch action {
+                    case .photo: importTarget = library.current?.id; showPhotos = true
+                    case .imageFile: beginImport(artwork: true)
+                    case .removeArtwork: if let id = library.current?.id { library.removeArtwork(for: id) }
+                    case .details: detailsTrack = library.current
+                    case .lyrics: beginImport(artwork: false)
                     }
-                    Button("画像ファイルからジャケットを選ぶ", systemImage: "folder") { beginImport(artwork: true) }
-                    if library.current?.artworkFilename != nil {
-                        Button("ジャケットを外す", systemImage: "photo.badge.minus", role: .destructive) {
-                            if let id = library.current?.id { library.removeArtwork(for: id) }
-                        }
-                    }
-                    Button("曲の情報を編集", systemImage: "pencil") { detailsTrack = library.current }
-                    Button("LRCを読み込む", systemImage: "doc.badge.plus") { beginImport(artwork: false) }
-
-                } label: { Image(systemName: "ellipsis").frame(width: 44, height: 44) }
-                    .accessibilityLabel("曲と表示の設定")
-                    .accessibilityIdentifier("player-options")
+                }.equatable()
             }
         }
     }
@@ -242,6 +235,26 @@ struct PlayerView: View {
     private func time(_ seconds: Double) -> String {
         let value = Int(max(0, seconds.isFinite ? seconds : 0))
         return String(format: "%d:%02d", value / 60, value % 60)
+    }
+}
+
+// This view deliberately does not observe MusicLibrary. Playback ticks must not
+// recreate an open UIKit menu. Only changes to the selected track or artwork do.
+private struct PlayerOptionsMenu: View, Equatable {
+    enum Action { case photo, imageFile, removeArtwork, details, lyrics }
+    let trackID: UUID?
+    let hasArtwork: Bool
+    let action: (Action) -> Void
+    static func == (lhs: Self, rhs: Self) -> Bool { lhs.trackID == rhs.trackID && lhs.hasArtwork == rhs.hasArtwork }
+    var body: some View {
+        Menu {
+            Button("写真からジャケットを選ぶ", systemImage: "photo") { action(.photo) }
+            Button("画像ファイルからジャケットを選ぶ", systemImage: "folder") { action(.imageFile) }
+            if hasArtwork { Button("ジャケットを外す", systemImage: "photo.badge.minus", role: .destructive) { action(.removeArtwork) } }
+            Button("曲の情報を編集", systemImage: "pencil") { action(.details) }
+            Button("LRCを読み込む", systemImage: "doc.badge.plus") { action(.lyrics) }
+        } label: { Image(systemName: "ellipsis").frame(width: 44, height: 44) }
+            .accessibilityLabel("曲と表示の設定").accessibilityIdentifier("player-options")
     }
 }
 
