@@ -25,7 +25,11 @@ final class PlayerUITests: XCTestCase {
         app.launch()
         app.buttons["track-00000000-0000-0000-0000-000000000002"].tap()
         app.buttons["player-play-pause"].tap()
-        app.buttons["player-options"].tap()
+        // Native popover buttons can refuse XCTest's scroll-to-visible action
+        // during playback. Use a physical tap at the button's displayed center.
+        let options = app.buttons["player-options"]
+        XCTAssertTrue(options.waitForExistence(timeout: 5))
+        options.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         let action = app.buttons["曲の情報を編集"]
         XCTAssertTrue(action.waitForExistence(timeout: 5))
         let before = action.frame
