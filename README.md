@@ -2,7 +2,7 @@
 
 SwiftUI / AVAudioPlayer、iOS 17以降向けの初版です。GitHubのmacOS環境でiPhone向けReleaseビルドとPC・Swift両方の歌詞形式チェックが成功し、未署名IPAを生成しました。iPhone実機での導入・再生確認はまだ実施していません。IPAはAltStore Classicなどで署名してからインストールします。
 
-ビルド結果: https://github.com/tokage0523/otonotana/actions/runs/38122530311
+最新のビルド・検証状況: https://github.com/tokage0523/otonotana/actions/runs/38522143276
 
 ## 現在の実装
 
@@ -46,7 +46,7 @@ SwiftUI / AVAudioPlayer、iOS 17以降向けの初版です。GitHubのmacOS環�
 
 1. PCから音楽ファイルとLRCをiPhoneの「ファイル」で開ける場所へ転送する。
 2. アプリの＋から音楽を取り込み、その曲を選ぶ。
-3. 「歌詞を表示・タップして再生」を開き、「LRCを読み込む」で対応する歌詞を選ぶ。
+3. 曲をタップして再生画面を開き、左下の吹き出しアイコンで歌詞に切り替える。右上の書類＋アイコン、または中央の「LRCを読み込む」から対応する歌詞を選ぶ。再生画面右上の「…」からも読み込める。
 4. 歌詞の行をタップすると、その時刻から再生する。一時停止中でも再生を開始する。
 
 読み込んだ歌詞はその曲に保存され、次回も利用できます。LRCは `[00:12.345]歌詞` の形式です。空の歌詞行は間奏として表示します。時刻は各行の開始位置です。音楽ファイルへ歌詞を埋め込む必要はありません。
@@ -59,7 +59,7 @@ SwiftUI / AVAudioPlayer、iOS 17以降向けの初版です。GitHubのmacOS環�
 2. mainブランチへのコード追加・更新でビルドが開始する。Actions → Build iPhone app → Run workflowから手動でも実行できる。公開リポジトリの標準macOSランナーは無料。非公開リポジトリでは実行をスキップする設定で、ストアへの配信は行わない。
 3. ビルドに成功したら成果物 `M4APlayer-unsigned` をダウンロードし、ZIP内のIPAを取り出す。未署名なのでそのままではiPhoneで起動できない。
 4. AltStoreの公式Windows手順に従ってAltServerとAltStore Classicを導入する。
-5. IPAをiPhoneへ転送し、AltStore Classicから自分の無料Apple Accountで署名して導入する。
+5. USBでiPhoneをPCに接続し、Windowsの通知領域にあるAltServerのアイコンをShiftキーを押しながらクリックする。「Sideload .ipa…」からIPAを選び、自分の無料Apple Accountで署名して導入する。iCloudへの転送は不要。AltStore Classic内の「My Apps → ＋」からIPAを選ぶ方法も使える。
 6. 無料署名は7日で期限切れになるので、期限前にAltServerを使って更新する。更新は通常アプリを削除せずに行える。アプリ削除は取り込んだ曲・歌詞も消すため避ける。
 
 公開リポジトリを使う場合はアプリのソースが公開されます。非公開リポジトリの無料実行枠や課金設定は別条件なので、費用ゼロを保証するものではありません。このプロジェクトから外部への公開・課金サービスの登録は行っていません。
@@ -103,7 +103,7 @@ xcodebuild -project M4APlayer.xcodeproj -scheme M4APlayer -sdk iphonesimulator -
 - 写真・画像ファイルによるジャケットの設定、別の曲への切り替え、アプリ再起動後の表示
 - 旧版の曲・歌詞を引き継いだ更新、曲の情報とお気に入りの保存
 
-デザインの参考: [Apple Musicの再生画面](https://support.apple.com/ja-jp/guide/iphone/iph676daac9b/ios)、[Spotifyの歌詞画面・プレビュー](https://support.spotify.com/us/article/lyrics/)。スクロールの切り替えは本アプリの用途に合わせて追加しています。
+デザインの参考: [Apple Musicの再生画面](https://support.apple.com/ja-jp/guide/iphone/iph676daac9b/ios)、[Spotifyの歌詞画面・プレビュー](https://support.spotify.com/us/article/lyrics/)、[Dopplerの曲情報編集](https://apps.apple.com/us/app/doppler-mp3-flac-player/id1468459747)、[foobar2000のiOS画面](https://www.foobar2000.org/screenshots-ios)。スクロールの切り替えは本アプリの用途に合わせて追加しています。
 
 PC側の形式チェックは `node PCEditor/lyrics-core.test.cjs`。iPhone側のパーサーのチェックはGitHubのmacOSビルド時に実行します。実機上の動作を確認するテストの代わりにはなりません。
 
