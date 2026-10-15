@@ -25,6 +25,7 @@ struct LyricsTimingView: View {
                 }
             }.navigationTitle("歌詞のタイミング")
                 .toolbar { Button("閉じる") { dismiss() }.accessibilityIdentifier("lyrics-timing-close") }
-        }
+        }.foregroundStyle(Color.primary).tint(.indigo)
     }
 }
+
