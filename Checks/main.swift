@@ -60,6 +60,43 @@ let root = URL(fileURLWithPath: "/app/Documents", isDirectory: true)
 check(SharedFiles.safeURL("Album/song.m4a", under: root)?.path == "/app/Documents/Album/song.m4a", "shared audio uses original file path")
 check(SharedFiles.safeURL("../library.json", under: root) == nil, "shared path cannot escape root")
 check(SharedFiles.safeURL("/outside.m4a", under: root) == nil, "absolute shared path rejected")
+check(SharedFiles.safeURL("", under: root) == nil, "empty shared path rejected")
+
+// Reproduce the device-only failure: an enumerator can return the physical URL
+// while the Documents URL uses a shorter alias. Character slicing is invalid.
+let pathFixture = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+let actualRoot = pathFixture.appendingPathComponent("ActualContainer/Documents", isDirectory: true)
+let aliasRoot = pathFixture.appendingPathComponent("d", isDirectory: true)
+try FileManager.default.createDirectory(at: actualRoot, withIntermediateDirectories: true)
+defer { try? FileManager.default.removeItem(at: pathFixture) }
+try FileManager.default.createSymbolicLink(at: aliasRoot, withDestinationURL: actualRoot)
+let relative = "日本語 Album/ギフト (Instrumental) 100%.m4a"
+let physicalFile = actualRoot.appendingPathComponent(relative)
+try FileManager.default.createDirectory(at: physicalFile.deletingLastPathComponent(), withIntermediateDirectories: true)
+try Data("path fixture".utf8).write(to: physicalFile)
+let aliasFile = aliasRoot.appendingPathComponent(relative)
+let oldSlicedPath = String(physicalFile.path.dropFirst(aliasRoot.path.count + 1))
+check(oldSlicedPath != relative, "old character slicing reproduces a malformed shared path")
+check(SharedFiles.relativePath(for: physicalFile, under: aliasRoot) == relative, "physical file relative to aliased root")
+check(SharedFiles.relativePath(for: aliasFile, under: actualRoot) == relative, "aliased file relative to physical root")
+let recovered = SharedFiles.safeURL(relative, under: aliasRoot)!
+let recoveredData = try Data(contentsOf: recovered)
+check(recoveredData == Data("path fixture".utf8), "rebuilt shared path opens the original bytes")
+check(SharedFiles.canonicalURL(recovered) == SharedFiles.canonicalURL(physicalFile), "alias path points to one original file")
+let outside = pathFixture.appendingPathComponent("Outside", isDirectory: true)
+try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
+try FileManager.default.createSymbolicLink(at: actualRoot.appendingPathComponent("Escape"), withDestinationURL: outside)
+check(SharedFiles.safeURL("Escape/song.m4a", under: actualRoot) == nil, "symlink cannot escape the shared root")
+let realRoot = SharedFiles.canonicalURL(actualRoot)
+if realRoot.path.hasPrefix("/private/var/") || realRoot.path.hasPrefix("/var/") {
+    let shortRoot = URL(fileURLWithPath: realRoot.path.replacingOccurrences(of: "/private/var/", with: "/var/"), isDirectory: true)
+    let longRoot = URL(fileURLWithPath: "/private" + shortRoot.path, isDirectory: true)
+    if FileManager.default.fileExists(atPath: longRoot.path) {
+        check(SharedFiles.relativePath(for: longRoot.appendingPathComponent(relative), under: shortRoot) == relative,
+              "iOS-style private-var and var aliases produce the same shared path")
+    }
+}
+print("Shared path alias regression checks passed.")
 var song1 = Track(id: a, title: "Two", filename: "a.m4a")
 var song2 = Track(id: b, title: "One", filename: "b.m4a")
 song1.album = "Album"; song2.album = "Album"

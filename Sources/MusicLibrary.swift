@@ -163,7 +163,7 @@ final class MusicLibrary: NSObject, ObservableObject, AVAudioPlayerDelegate {
         while scanning { try? await Task.sleep(nanoseconds: 100_000_000) }
         var failures: [String] = []
         for source in urls {
-            let destinationDirectory = sharedDirectory
+            let destinationDirectory = SharedFiles.canonicalURL(sharedDirectory)
             do {
                 let track = try await Task.detached(priority: .userInitiated) {
                     let access = source.startAccessingSecurityScopedResource()
@@ -173,19 +173,21 @@ final class MusicLibrary: NSObject, ObservableObject, AVAudioPlayerDelegate {
                         throw NSError(domain: "MusicImport", code: 1, userInfo: [NSLocalizedDescriptionKey: "未対応の形式です"])
                     }
                     let id = UUID()
-                    let root = destinationDirectory.standardizedFileURL.path + "/"
-                    let alreadyShared = source.standardizedFileURL.path.hasPrefix(root)
+                    let alreadyShared = SharedFiles.relativePath(for: source, under: destinationDirectory) != nil
                     var filename = source.lastPathComponent
                     if !alreadyShared && FileManager.default.fileExists(atPath: destinationDirectory.appendingPathComponent(filename).path) {
                         filename = "\(id.uuidString)-\(filename)"
                     }
-                    let target = alreadyShared ? source : destinationDirectory.appendingPathComponent(filename)
+                    let target = alreadyShared ? SharedFiles.canonicalURL(source) : destinationDirectory.appendingPathComponent(filename)
                     if !alreadyShared { try FileManager.default.copyItem(at: source, to: target) }
                     do {
                         // Decode before committing the library entry; no conversion is performed.
                         _ = try await AudioImportValidator.duration(at: target)
                         var value = Track(id: id, title: source.deletingPathExtension().lastPathComponent, filename: filename)
-                        value.sharedPath = String(target.standardizedFileURL.path.dropFirst(root.count))
+                        guard let path = SharedFiles.relativePath(for: target, under: destinationDirectory) else {
+                            throw NSError(domain: "MusicImport", code: 3, userInfo: [NSLocalizedDescriptionKey: "保存先の場所を確認できませんでした。"])
+                        }
+                        value.sharedPath = path
                         value.addedAt = Date()
                         return value
                     } catch {
@@ -308,7 +310,7 @@ final class MusicLibrary: NSObject, ObservableObject, AVAudioPlayerDelegate {
         guard !scanning, !importing else { return }
         scanning = true
         defer { scanning = false }
-        let root = sharedDirectory
+        let root = SharedFiles.canonicalURL(sharedDirectory)
         do {
             let files = try await Task.detached(priority: .utility) { () -> [(String, String)] in
                 let keys: [URLResourceKey] = [.isRegularFileKey, .isSymbolicLinkKey, .contentModificationDateKey, .fileSizeKey]
@@ -318,7 +320,7 @@ final class MusicLibrary: NSObject, ObservableObject, AVAudioPlayerDelegate {
                     let values = try url.resourceValues(forKeys: Set(keys))
                     guard values.isRegularFile == true, values.isSymbolicLink != true,
                           SharedFiles.audioExtensions.contains(url.pathExtension.lowercased()) else { continue }
-                    let path = String(url.path.dropFirst(root.path.count + 1))
+                    guard let path = SharedFiles.relativePath(for: url, under: root) else { continue }
                     let stamp = "\(values.fileSize ?? 0):\(values.contentModificationDate?.timeIntervalSince1970 ?? 0)"
                     found.append((path, stamp))
                 }

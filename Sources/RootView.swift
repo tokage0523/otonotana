@@ -118,7 +118,7 @@ struct SettingsView: View {
                         }.accessibilityIdentifier("shared-import-results")
                     }
                 }
-                Section { Text("音の棚 0.3.3").foregroundStyle(.secondary) }
+                Section { Text("音の棚 0.3.4").foregroundStyle(.secondary) }
             }.navigationTitle("設定")
         }
     }

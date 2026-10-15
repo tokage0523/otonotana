@@ -103,10 +103,21 @@ struct PlaybackOrder {
 
 enum SharedFiles {
     static let audioExtensions: Set<String> = ["m4a", "mp3", "wav", "aif", "aiff", "caf"]
+    static func canonicalURL(_ url: URL) -> URL {
+        url.resolvingSymlinksInPath().standardizedFileURL
+    }
+
+    static func relativePath(for url: URL, under root: URL) -> String? {
+        guard url.isFileURL, root.isFileURL else { return nil }
+        let base = canonicalURL(root).pathComponents
+        let target = canonicalURL(url).pathComponents
+        guard target.count > base.count, Array(target.prefix(base.count)) == base else { return nil }
+        return target.dropFirst(base.count).joined(separator: "/")
+    }
+
     static func safeURL(_ relativePath: String, under root: URL) -> URL? {
-        guard !relativePath.hasPrefix("/"), !relativePath.split(separator: "/").contains("..") else { return nil }
-        let target = root.appendingPathComponent(relativePath).standardizedFileURL
-        let base = root.standardizedFileURL.path + "/"
-        return target.path.hasPrefix(base) ? target : nil
+        guard !relativePath.isEmpty, !relativePath.hasPrefix("/"), !relativePath.split(separator: "/").contains("..") else { return nil }
+        let target = canonicalURL(root.appendingPathComponent(relativePath))
+        return self.relativePath(for: target, under: root) != nil ? target : nil
     }
 }
