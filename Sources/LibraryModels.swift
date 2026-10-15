@@ -67,7 +67,7 @@ struct PlaybackOrder: Codable {
     mutating func setShuffle(_ enabled: Bool) { shuffled = enabled; future = []; rebuild() }
     private mutating func rebuild() {
         order = shuffled ? source.filter { $0 != current }.shuffled() : source
-        if shuffled, let current { order.insert(current, at: 0) }
+        if let current, shuffled || !order.contains(current) { order.insert(current, at: 0) }
     }
     func canAdvance(automatic: Bool = false) -> Bool {
         if automatic && repeatMode == .one { return current != nil }
@@ -111,7 +111,11 @@ struct PlaybackOrder: Codable {
     }
 
     mutating func jump(to id: UUID) {
-        guard order.contains(id), current != id else { return }
+        let pending = upcoming
+        guard order.contains(id) || pending.contains(id), current != id else { return }
+        if !order.contains(id), let index = pending.firstIndex(of: id) {
+            order = [id] + Array(pending.dropFirst(index + 1)); source = order
+        }
         if let current { history.append(current) }
         current = id; future = []
     }

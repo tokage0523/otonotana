@@ -972,10 +972,11 @@ extension MusicLibrary {
         guard !scanning, !importing else { throw StorageError.busy }
         guard catalogReadable else { throw StorageError.invalidBackup }
         importing = true; defer { importing = false }
-        let settings = Dictionary(uniqueKeysWithValues: BackupFiles.settingsKeys.compactMap { key -> (String, String)? in
-            guard let value = UserDefaults.standard.object(forKey: key) else { return nil }
-            return (key, String(describing: value))
-        })
+        var settings = ["appAppearance": "system", "playerTheme": "artwork", "lyricsTimestamps": "false",
+                        "lyricsPreview": "true", "lyricsAutoScroll": "true", "lyricsSize": "1"]
+        for key in BackupFiles.settingsKeys {
+            if let value = UserDefaults.standard.object(forKey: key) { settings[key] = String(describing: value) }
+        }
         let records = tracks.map { original -> Track in
             var track = original
             if track.sharedPath == nil { track.sharedPath = "Music/" + track.filename }
@@ -1009,7 +1010,8 @@ extension MusicLibrary {
         merged += prepared.manifest.tracks
         var lists = playlists.filter { old in !prepared.manifest.playlists.contains { $0.id == old.id } }
         for index in lists.indices {
-            lists[index].trackIDs = lists[index].trackIDs.map { prepared.replaces[$0] ?? $0 }
+            var seen = Set<UUID>()
+            lists[index].trackIDs = lists[index].trackIDs.map { prepared.replaces[$0] ?? $0 }.filter { seen.insert($0).inserted }
         }
         lists += prepared.manifest.playlists
         var albums = manualAlbums.filter { old in !prepared.manifest.albums.contains { $0.id == old.id } }
@@ -1031,8 +1033,13 @@ extension MusicLibrary {
             throw error
         }
         let oldArtwork = Set(tracks.compactMap(\.artworkFilename))
+        let previousID = current?.id, previousPosition = position
         tracks = merged; playlists = lists; manualAlbums = albums; catalogReadable = true
-        if let id = current?.id { current = tracks.first { $0.id == id }; loadCurrentArtwork() }
+        playbackOrder.sanitize(validIDs: Set(tracks.map(\.id)))
+        if let previousID, let track = tracks.first(where: { $0.id == (prepared.replaces[previousID] ?? previousID) }), FileManager.default.fileExists(atPath: audioURL(for: track).path) {
+            if playbackOrder.current != track.id { playbackOrder.start(track.id, in: tracks.map(\.id)) }
+            if loadTrack(track, autoplay: false) { seek(previousPosition) }
+        } else if previousID != nil { stop() }
         for name in oldArtwork { removeUnusedArtwork(name) }
         for (key, value) in prepared.manifest.settings where BackupFiles.settingsKeys.contains(key) {
             if ["lyricsTimestamps", "lyricsPreview", "lyricsAutoScroll"].contains(key) { UserDefaults.standard.set(value == "true" || value == "1", forKey: key) }

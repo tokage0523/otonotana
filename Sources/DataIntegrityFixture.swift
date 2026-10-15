@@ -34,12 +34,16 @@ extension MusicLibrary {
             let metadata = try BackupFiles.readManifest(at: metadataBackup)
             try require(metadata.audioFiles.isEmpty, "Metadata backup contains duplicated music")
             let fullBackup = try await createBackup(includeAudio: true); temporary.append(fullBackup)
+            select(edited); pause(); seek(20)
+            UserDefaults.standard.set("dark", forKey: "appAppearance")
             updateDetails(for: id, title: "Changed temporarily", artist: "Changed", album: "Changed")
             removePlaylist(playlists.first { $0.id == listID }!)
             try await restoreBackup(from: metadataBackup)
             try require(tracks.first { $0.id == id }?.title == edited.title, "Metadata restore lost original title")
             try require(tracks.first { $0.id == id }?.lyrics == edited.lyrics && tracks.first { $0.id == id }?.lyricsOffset == 0.2, "Lyrics/offset did not restore")
             try require(playlists.first { $0.id == listID }?.trackIDs == [id], "Backup restore lost playlist references")
+            try require(!playing && abs(position - 20) < 0.01, "Backup restore did not reload the current audio in paused state")
+            try require(UserDefaults.standard.string(forKey: "appAppearance") == metadata.settings["appAppearance"], "Default appearance did not restore")
             let active = tracks.first { $0.id == id }!
             remove(active)
             let trashedAgain = deletedTracks.first { $0.track.id == id }!

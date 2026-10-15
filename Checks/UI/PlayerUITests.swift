@@ -368,7 +368,7 @@ final class PlayerUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["lyrics-offset-value"].label.contains("0.2"))
         capture(app, "21-lyrics-timing")
         app.buttons["補正をリセット"].tap()
-        app.buttons["閉じる"].tap()
+        app.buttons["lyrics-timing-close"].tap()
         let line = app.buttons["lyric-42.0"]
         XCTAssertTrue(line.waitForExistence(timeout: 5))
         line.press(forDuration: 1)
