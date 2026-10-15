@@ -65,7 +65,9 @@ struct TrackCollectionView: View {
                         Button("シャッフル", systemImage: "shuffle") { start(shuffled: true) }.frame(maxWidth: .infinity)
                     }.buttonStyle(.bordered)
                 }
-                Section("\(tracks.count)曲") { ForEach(tracks) { TrackRow(track: $0, context: tracks) } }
+                Section("\(tracks.count)曲") {
+                    ForEach(tracks) { TrackRow(track: $0, context: tracks, playlistID: playlist?.id, removeFavoriteOnly: isFavorites) }
+                }
             }
         }.navigationTitle(title)
             .toolbar { if playlist != nil { Button("編集") { editing = true } } }
@@ -79,6 +81,7 @@ struct TrackCollectionView: View {
             library.select(first, context: tracks); library.resume(); library.playerPresented = true
         }
     }
+    private var isFavorites: Bool { if case .favorites = source { return true }; return false }
 }
 
 enum CollectionKind { case album, playlist }
@@ -86,6 +89,13 @@ enum CollectionKind { case album, playlist }
 struct CollectionEditor: View {
     @EnvironmentObject private var library: MusicLibrary
     @Environment(\.dismiss) private var dismiss
+    private func collectionTrackLabel(_ track: Track) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(track.title).lineLimit(2)
+            Text("\(track.artist?.nonEmpty ?? "アーティスト未設定") · \(track.album?.nonEmpty ?? "アルバム未設定")")
+                .font(.caption).foregroundStyle(.secondary).lineLimit(2)
+        }
+    }
     let kind: CollectionKind
     let id: UUID?
     @State private var title: String
@@ -117,13 +127,13 @@ struct CollectionEditor: View {
                     ForEach(selected) { track in
                         HStack {
                             Button("外す", systemImage: "minus.circle.fill") { ids.removeAll { $0 == track.id } }.labelStyle(.iconOnly).tint(.red)
-                            Text(track.title).lineLimit(2)
+                            collectionTrackLabel(track)
                         }
                     }.onMove { from, to in ids.move(fromOffsets: from, toOffset: to) }
                 }
                 Section("曲を追加") {
                     ForEach(available) { track in
-                        Button { ids.append(track.id) } label: { Label(track.title, systemImage: "plus.circle") }
+                        Button { ids.append(track.id) } label: { HStack { Image(systemName: "plus.circle"); collectionTrackLabel(track) } }
                             .accessibilityIdentifier("collection-add-\(track.id.uuidString)")
                     }.moveDisabled(true)
                 }

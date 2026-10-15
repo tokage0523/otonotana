@@ -31,7 +31,16 @@
     return rows.slice().sort((a, b) => a.seconds - b.seconds)
       .map(row => `[${timestamp(row.seconds)}]${row.text}`).join('\n') + '\n';
   }
-  const api = { timestamp, parse, serialize };
+  function shift(rows, delta, start = 0) {
+    if (!Number.isFinite(delta) || !Number.isInteger(start) || start < 0) throw new Error('ずらす秒数を確認してください。');
+    return rows.map((row, index) => {
+      if (row.seconds === null || index < start) return { ...row };
+      const value = Math.round(Math.max(0, row.seconds + delta) * 1000) / 1000;
+      if (!Number.isFinite(value)) throw new Error('ずらす秒数が大きすぎます。');
+      return { ...row, seconds: value };
+    });
+  }
+  const api = { timestamp, parse, serialize, shift };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.LyricsCore = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

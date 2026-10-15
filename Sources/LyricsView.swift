@@ -2,7 +2,7 @@ import SwiftUI
 
 struct LyricsView: View {
     @EnvironmentObject private var library: MusicLibrary
-    @ObservedObject var clock: PlaybackClock
+    let clock: PlaybackClock
     @AppStorage("lyricsAutoScroll") private var autoScroll = true
     @AppStorage("lyricsTimestamps") private var timestamps = false
     @AppStorage("lyricsSize") private var size = 1
@@ -11,7 +11,8 @@ struct LyricsView: View {
     let palette: PlayerPalette
     let importLyrics: () -> Void
 
-    private var activeID: UUID? { library.current?.lyrics?.last { $0.seconds <= clock.position }?.id }
+    @State private var activeID: UUID?
+    @State private var showTiming = false
     private var fontSize: CGFloat { standardSize * (size == 0 ? 0.83 : size == 2 ? 1.21 : 1) }
 
     var body: some View {
@@ -34,8 +35,21 @@ struct LyricsView: View {
                             .accessibilityAddTraits(size == index ? .isSelected : [])
                     }
                 }.background(palette.text.opacity(0.07), in: Capsule())
-                Button("LRCを読み込む", systemImage: "doc.badge.plus", action: importLyrics).labelStyle(.iconOnly).frame(width: 44, height: 44)
+                Menu {
+                    Button("歌詞のタイミングを調整", systemImage: "slider.horizontal.3") { showTiming = true }
+                    Button("LRCを読み込む", systemImage: "doc.badge.plus", action: importLyrics)
+                    if library.lyricLoop != nil { Button("範囲リピートを解除") { library.clearLyricLoop() } }
+                } label: { Image(systemName: "ellipsis").frame(width: 44, height: 44) }
+                    .accessibilityLabel("歌詞の設定").accessibilityIdentifier("lyrics-options")
             }.foregroundStyle(palette.text)
+            if let range = library.lyricLoop {
+                HStack {
+                    Label(range.end == nil ? "開始を設定済み · 終了の歌詞を長押し" : "歌詞の範囲をリピート中", systemImage: "repeat")
+                        .font(.caption)
+                    Spacer()
+                    Button("解除") { library.clearLyricLoop() }.font(.caption.bold())
+                }.foregroundStyle(palette.text).padding(.horizontal, 6).accessibilityIdentifier("lyrics-loop-status")
+            }
             if let lines = library.current?.lyrics, !lines.isEmpty, let trackID = library.current?.id {
                 ScrollViewReader { proxy in
                     ScrollView {
@@ -46,11 +60,15 @@ struct LyricsView: View {
                                         Text(line.text.nonEmpty ?? "• • •").font(.system(size: fontSize, weight: .bold))
                                             .foregroundStyle(palette.text.opacity(line.id == activeID ? 1 : 0.58))
                                         if timestamps {
-                                            Text(timestamp(line.seconds)).font(.caption.monospacedDigit()).foregroundStyle(palette.secondary)
+                                            Text(timestamp(library.current?.lyricTime(line) ?? line.seconds)).font(.caption.monospacedDigit()).foregroundStyle(palette.secondary)
                                         }
                                     }.frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 6).padding(.vertical, 6)
                                 }.buttonStyle(.plain).id(line.id).accessibilityIdentifier("lyric-\(line.seconds)")
                                     .accessibilityHint("この歌詞の時刻から再生")
+                                    .contextMenu {
+                                        Button("ここから繰り返す", systemImage: "a.circle") { library.setLoopStart(line) }
+                                        Button("ここまで繰り返す", systemImage: "b.circle") { library.setLoopEnd(line) }.disabled(library.lyricLoop == nil)
+                                    }
                             }
                         }.padding(.vertical, 30)
                     }.scrollIndicators(.hidden)
@@ -70,7 +88,17 @@ struct LyricsView: View {
                     Button("LRCを読み込む", action: importLyrics).buttonStyle(.bordered).tint(palette.text)
                 }.foregroundStyle(palette.text).frame(maxWidth: .infinity, maxHeight: .infinity)
             }
+        }.onReceive(clock.$position) { position in
+            let next = library.current?.lyrics?.last { (library.current?.lyricTime($0) ?? $0.seconds) <= position }?.id
+            if next != activeID { activeID = next }
         }
+        .onChange(of: library.current?.lyricsOffset) { _, _ in
+            activeID = library.current?.lyrics?.last { (library.current?.lyricTime($0) ?? $0.seconds) <= clock.position }?.id
+        }
+        .onChange(of: library.current?.lyrics) { _, _ in
+            activeID = library.current?.lyrics?.last { (library.current?.lyricTime($0) ?? $0.seconds) <= clock.position }?.id
+        }
+        .sheet(isPresented: $showTiming) { LyricsTimingView().environmentObject(library) }
     }
     private func scroll(_ proxy: ScrollViewProxy, to id: UUID) {
         withAnimation(reduceMotion ? nil : .easeOut(duration: 0.26)) { proxy.scrollTo(id, anchor: .center) }

@@ -195,7 +195,12 @@ struct PlayerView: View {
 
     private var queue: some View {
         NavigationStack {
-            List(library.queueTracks) { track in
+            List {
+                if let track = library.current {
+                    Section("再生中") { Text(track.title).font(.headline) }
+                }
+                Section("次に再生") {
+                    ForEach(library.upcomingTracks) { track in
                 Button { library.select(track, context: library.queueTracks); showQueue = false } label: {
                     HStack(spacing: 12) {
                         CoverView(image: library.artwork(for: track), cornerRadius: 8).frame(width: 44, height: 44)
@@ -207,7 +212,17 @@ struct PlayerView: View {
                         if library.current?.id == track.id { Image(systemName: "waveform") }
                     }
                 }
-            }.navigationTitle("曲一覧").toolbar { Button("閉じる") { showQueue = false } }
+                    }.onMove { library.moveUpcoming(from: $0, to: $1) }
+                        .onDelete { offsets in
+                            let ids = offsets.compactMap { library.upcomingTracks.indices.contains($0) ? library.upcomingTracks[$0].id : nil }
+                            for id in ids { library.removeUpcoming(id) }
+                        }
+                    if library.upcomingTracks.isEmpty { Text("次の曲はありません").foregroundStyle(.secondary) }
+                }
+            }.navigationTitle("次に再生").toolbar {
+                ToolbarItem(placement: .topBarLeading) { Button("閉じる") { showQueue = false } }
+                ToolbarItem(placement: .topBarTrailing) { EditButton() }
+            }
         }.tint(.indigo)
     }
 

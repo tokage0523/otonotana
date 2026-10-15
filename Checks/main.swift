@@ -113,3 +113,54 @@ let playlist = Playlist(id: UUID(), title: "Set", trackIDs: [b, a])
 let restoredPlaylist = try JSONDecoder().decode(Playlist.self, from: JSONEncoder().encode(playlist))
 check(restoredPlaylist == playlist, "playlist order persists as references")
 print("Queue, album grouping, playlist persistence and shared path checks passed.")
+
+var editedQueue = PlaybackOrder()
+editedQueue.start(a, in: [a, b, c])
+let d = UUID()
+editedQueue.enqueue(d, next: true)
+check(editedQueue.advance() == d && editedQueue.advance() == b, "play-next inserts without interrupting current")
+editedQueue.replaceUpcoming([c, a])
+check(editedQueue.advance() == c, "edited upcoming order is used")
+let snapshot = PlaybackSnapshot(order: editedQueue, position: 34)
+let savedPlayback = try JSONDecoder().decode(PlaybackSnapshot.self, from: JSONEncoder().encode(snapshot))
+check(savedPlayback.order.current == c && savedPlayback.position == 34, "playback state persists")
+var sanitized = savedPlayback.order
+sanitized.sanitize(validIDs: [a, b, c])
+check(!sanitized.order.contains(d), "missing queue items are removed during recovery")
+var shiftedTrack = oldTrack
+shiftedTrack.lyricsOffset = -0.2
+check(shiftedTrack.lyricTime(LyricLine(id: UUID(), seconds: 0.1, text: "line")) == 0, "negative lyric correction clamps to zero")
+
+let archiveRoot = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+try FileManager.default.createDirectory(at: archiveRoot, withIntermediateDirectories: true)
+defer { try? FileManager.default.removeItem(at: archiveRoot) }
+var backupTrack = Track(id: UUID(), title: "Backup sample", filename: physicalFile.lastPathComponent)
+backupTrack.sharedPath = relative; backupTrack.lyrics = lines; backupTrack.lyricsOffset = 0.2
+let backupList = Playlist(id: UUID(), title: "Saved set", trackIDs: [backupTrack.id])
+let manifest = BackupManifest(createdAt: Date(), tracks: [backupTrack], playlists: [backupList], albums: [],
+                              audioFiles: [:], artworkFiles: [:], settings: ["appAppearance": "dark"])
+let lightBackup = try BackupFiles.export(manifest: manifest, audio: [backupTrack.id: physicalFile], artworkRoot: archiveRoot, includeAudio: false)
+defer { try? FileManager.default.removeItem(at: lightBackup) }
+let lightManifest = try BackupFiles.readManifest(at: lightBackup)
+check(lightManifest.audioFiles.isEmpty && lightManifest.tracks[0].lyrics == lines, "metadata-only backup keeps lyrics without copying music")
+let completeBackup = try BackupFiles.export(manifest: manifest, audio: [backupTrack.id: physicalFile], artworkRoot: archiveRoot, includeAudio: true)
+defer { try? FileManager.default.removeItem(at: completeBackup) }
+let staged = try BackupFiles.prepareRestore(at: completeBackup, existing: [], sharedRoot: actualRoot, supportRoot: archiveRoot)
+defer { try? FileManager.default.removeItem(at: staged.staging) }
+let stagedPath = staged.audioFolder.appendingPathComponent(backupTrack.id.uuidString + ".m4a")
+let stagedData = try Data(contentsOf: stagedPath)
+check(stagedData == recoveredData, "full backup preserves exact audio bytes")
+check(staged.manifest.playlists[0].trackIDs == [backupTrack.id] && staged.manifest.tracks[0].lyricsOffset == 0.2, "restore keeps IDs, playlist references and timing offset")
+var malicious = manifest
+malicious.audioFiles[backupTrack.id.uuidString] = "../Outside/song.m4a"
+let badFolder = archiveRoot.appendingPathComponent("bad")
+try FileManager.default.createDirectory(at: badFolder, withIntermediateDirectories: true)
+try JSONEncoder().encode(malicious).write(to: badFolder.appendingPathComponent(BackupFiles.manifestName))
+do {
+    _ = try BackupFiles.prepareRestore(at: badFolder, existing: [], sharedRoot: actualRoot, supportRoot: archiveRoot)
+    fatalError("Failed: backup paths cannot escape the selected folder")
+} catch {}
+let catalog = LibraryCatalog(tracks: [backupTrack], playlists: [backupList], albums: [], deleted: [])
+let restoredCatalog = try JSONDecoder().decode(LibraryCatalog.self, from: JSONEncoder().encode(catalog))
+check(restoredCatalog.tracks == [backupTrack] && restoredCatalog.playlists == [backupList], "one catalog retains all related data together")
+print("Backup, playback recovery, timing correction and queue editing checks passed.")

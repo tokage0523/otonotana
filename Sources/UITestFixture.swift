@@ -29,7 +29,7 @@ extension MusicLibrary {
                 if !tracks.contains(where: { $0.id == otherID }) { try createUITestTrack(id: otherID) }
                 updateDetails(for: otherID, title: "Other sample", artist: "Sample Artist", album: "Short")
             }
-            if let track = tracks.first(where: { $0.id == id }) { select(track); pause(); seek(42) }
+            if !ProcessInfo.processInfo.arguments.contains("--restore-playback-test"), let track = tracks.first(where: { $0.id == id }) { select(track); pause(); seek(42) }
             if ProcessInfo.processInfo.arguments.contains("--shared-test-fixture"), let track = tracks.first(where: { $0.id == id }) {
                 let target = sharedDirectory.appendingPathComponent("Shared test.wav")
                 if !FileManager.default.fileExists(atPath: target.path) { try FileManager.default.copyItem(at: audioURL(for: track), to: target) }

@@ -20,8 +20,8 @@ targets:
       path: Info.plist
       properties:
         CFBundleDisplayName: Otonotana
-        CFBundleShortVersionString: '0.3.4'
-        CFBundleVersion: '7'
+        CFBundleShortVersionString: '0.4'
+        CFBundleVersion: '8'
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true
         UILaunchScreen: {}

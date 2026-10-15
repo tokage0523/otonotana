@@ -17,7 +17,7 @@ struct RootView: View {
                 LibraryView().opacity(tab == .library ? 1 : 0).allowsHitTesting(tab == .library).accessibilityHidden(tab != .library)
                 PlaylistsView().opacity(tab == .playlists ? 1 : 0).allowsHitTesting(tab == .playlists).accessibilityHidden(tab != .playlists)
                 SettingsView().opacity(tab == .settings ? 1 : 0).allowsHitTesting(tab == .settings).accessibilityHidden(tab != .settings)
-            }.frame(maxWidth: .infinity, maxHeight: .infinity)
+            }.frame(maxWidth: .infinity, maxHeight: .infinity).disabled(library.importing)
             if let track = library.current { MiniPlayer(track: track).padding(.horizontal, 16).padding(.top, 6) }
             HStack(spacing: 0) {
                 ForEach(AppTab.allCases, id: \.self) { item in
@@ -38,8 +38,21 @@ struct RootView: View {
                                                   set: { if !$0 { library.message = nil } })) {
                 Button("OK") { library.message = nil }
             } message: { Text(library.message ?? "") }
-            .task { library.migrateLegacyAudio(); await library.scanSharedFiles() }
-            .onChange(of: scenePhase) { _, phase in if phase == .active { Task { await library.scanSharedFiles() } } }
+            .task {
+                library.migrateLegacyAudio(); await library.scanSharedFiles()
+                #if DEBUG
+                if ProcessInfo.processInfo.arguments.contains("--data-integrity-test") { await library.runDataIntegrityChecks() }
+                #endif
+            }
+            .overlay(alignment: .top) {
+                #if DEBUG
+                if let status = library.verificationStatus { Text(status).padding().background(.regularMaterial).accessibilityIdentifier("data-integrity-result") }
+                #endif
+            }
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .active { Task { await library.scanSharedFiles() } }
+                else { library.savePlaybackState() }
+            }
     }
 }
 
@@ -118,7 +131,12 @@ struct SettingsView: View {
                         }.accessibilityIdentifier("shared-import-results")
                     }
                 }
-                Section { Text("音の棚 0.3.4").foregroundStyle(.secondary) }
+                Section("データの管理") {
+                    NavigationLink("バックアップと復元") { BackupView() }.accessibilityIdentifier("settings-backup")
+                    NavigationLink("最近削除した曲（\(library.deletedTracks.count)曲）") { RecentlyDeletedView() }.accessibilityIdentifier("settings-trash")
+                    NavigationLink("音楽が見つからない曲（\(library.missingTrackIDs.count)曲）") { MissingTracksView() }.accessibilityIdentifier("settings-missing")
+                }
+                Section { Text("音の棚 0.4").foregroundStyle(.secondary) }
             }.navigationTitle("設定")
         }
     }

@@ -137,7 +137,10 @@ struct TrackRow: View {
     @EnvironmentObject private var library: MusicLibrary
     let track: Track
     let context: [Track]
+    var playlistID: UUID? = nil
+    var removeFavoriteOnly = false
     @State private var editing = false
+    @State private var confirmDelete = false
     var body: some View {
         Button {
             library.select(track, context: context); library.playerPresented = true
@@ -147,16 +150,32 @@ struct TrackRow: View {
                     Text(track.title).font(.subheadline.weight(.semibold)).foregroundStyle(.primary).lineLimit(2)
                     Text("\(track.artist?.nonEmpty ?? "アーティスト未設定") · \(track.album?.nonEmpty ?? "アルバム未設定")")
                         .font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                    if library.missingTrackIDs.contains(track.id) {
+                        Label("ファイルが見つかりません", systemImage: "exclamationmark.triangle").font(.caption).foregroundStyle(.orange)
+                    }
                 }.frame(maxWidth: .infinity, alignment: .leading)
                 if track.isFavorite { Image(systemName: "heart.fill").font(.caption).foregroundStyle(.indigo) }
                 if library.current?.id == track.id { Image(systemName: "waveform").foregroundStyle(.indigo) }
             }.padding(.vertical, 8).contentShape(Rectangle())
         }.buttonStyle(.plain).accessibilityIdentifier("track-\(track.id.uuidString)")
-            .swipeActions { Button("削除", role: .destructive) { library.remove(track) } }
+            .swipeActions(allowsFullSwipe: false) {
+                if let playlistID { Button("プレイリストから外す", role: .destructive) { library.removeFromPlaylist(track.id, playlistID: playlistID) } }
+                else if removeFavoriteOnly { Button("お気に入りから外す") { library.toggleFavorite(track) }.tint(.orange) }
+                else { Button("ライブラリから削除", role: .destructive) { confirmDelete = true } }
+            }
             .contextMenu {
                 Button("曲の情報を編集", systemImage: "pencil") { editing = true }
                 Button(track.isFavorite ? "お気に入りを解除" : "お気に入りに追加", systemImage: "heart") { library.toggleFavorite(track) }
+                if library.current?.id != track.id {
+                    Button("次に再生", systemImage: "text.line.first.and.arrowtriangle.forward") { library.enqueue(track, next: true) }
+                    Button("最後に再生", systemImage: "text.append") { library.enqueue(track, next: false) }
+                }
+                if let playlistID { Button("プレイリストから外す", systemImage: "minus.circle") { library.removeFromPlaylist(track.id, playlistID: playlistID) } }
+                Button("ライブラリから削除", systemImage: "trash", role: .destructive) { confirmDelete = true }
             }
+            .confirmationDialog("「\(track.title)」をライブラリから削除しますか？", isPresented: $confirmDelete) {
+                Button("最近削除した曲へ移す", role: .destructive) { library.remove(track) }
+            } message: { Text("プレイリストからも外れます。設定の「最近削除した曲」から復元できます。") }
             .sheet(isPresented: $editing) { TrackDetailsView(track: track).environmentObject(library) }
     }
 }

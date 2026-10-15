@@ -7,3 +7,4 @@ build/
 *.mobileprovision
 Checks/output/
 Design/output/
+Checks/BrowserProfile/

@@ -5,7 +5,7 @@ struct TimedLyricsPreview: View {
     @ObservedObject var clock: PlaybackClock
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let palette: PlayerPalette
-    private var activeID: UUID? { library.current?.lyrics?.last { $0.seconds <= clock.position }?.id }
+    private var activeID: UUID? { library.current?.lyrics?.last { (library.current?.lyricTime($0) ?? $0.seconds) <= clock.position }?.id }
 
     var body: some View {
         ScrollViewReader { proxy in

@@ -44,12 +44,12 @@ extension String {
     var nonEmpty: String? { trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : self }
 }
 
-enum RepeatMode: String, CaseIterable {
+enum RepeatMode: String, CaseIterable, Codable {
     case off, all, one
     var label: String { self == .off ? "リピート OFF" : self == .all ? "全曲リピート" : "1曲リピート" }
 }
 
-struct PlaybackOrder {
+struct PlaybackOrder: Codable {
     private(set) var source: [UUID] = []
     private(set) var order: [UUID] = []
     private(set) var current: UUID?
@@ -71,6 +71,7 @@ struct PlaybackOrder {
     }
     func canAdvance(automatic: Bool = false) -> Bool {
         if automatic && repeatMode == .one { return current != nil }
+        if !future.isEmpty { return true }
         guard let current, let index = order.firstIndex(of: current) else { return false }
         return !future.isEmpty || index + 1 < order.count || repeatMode == .all
     }
@@ -99,12 +100,51 @@ struct PlaybackOrder {
         history.removeAll { $0 == id }; future.removeAll { $0 == id }
         if current == id { current = nil }
     }
+
+    var upcoming: [UUID] {
+        if !future.isEmpty { return Array(future.reversed()) + order.drop(while: { $0 != current }).dropFirst().filter { !future.contains($0) } }
+        guard let current, let index = order.firstIndex(of: current) else { return [] }
+        return Array(order.dropFirst(index + 1))
+    }
+
+    mutating func replaceUpcoming(_ ids: [UUID]) {
+        let unique = ids.reduce(into: [UUID]()) { result, id in
+            if id != current && !result.contains(id) { result.append(id) }
+        }
+        order = current.map { [$0] } ?? []
+        order += unique; source = order; future = []
+    }
+
+    mutating func enqueue(_ id: UUID, next: Bool) {
+        guard id != current else { return }
+        var values = upcoming.filter { $0 != id }
+        if next { values.insert(id, at: 0) } else { values.append(id) }
+        replaceUpcoming(values)
+    }
+
+    mutating func sanitize(validIDs: Set<UUID>) {
+        source.removeAll { !validIDs.contains($0) }; order.removeAll { !validIDs.contains($0) }
+        history.removeAll { !validIDs.contains($0) }; future.removeAll { !validIDs.contains($0) }
+        if let current, !validIDs.contains(current) { self.current = nil }
+    }
 }
 
 enum SharedFiles {
     static let audioExtensions: Set<String> = ["m4a", "mp3", "wav", "aif", "aiff", "caf"]
     static func canonicalURL(_ url: URL) -> URL {
-        url.resolvingSymlinksInPath().standardizedFileURL
+        // Foundation may leave symlinks unresolved if the final file is absent.
+        // Resolve the nearest existing ancestor, then append missing components.
+        var ancestor = url.standardizedFileURL
+        var suffix: [String] = []
+        while !FileManager.default.fileExists(atPath: ancestor.path), ancestor.path != "/" {
+            suffix.append(ancestor.lastPathComponent)
+            let parent = ancestor.deletingLastPathComponent()
+            if parent.path == ancestor.path { break }
+            ancestor = parent
+        }
+        var resolved = ancestor.resolvingSymlinksInPath().standardizedFileURL
+        for name in suffix.reversed() { resolved.appendPathComponent(name) }
+        return resolved.standardizedFileURL
     }
 
     static func relativePath(for url: URL, under root: URL) -> String? {

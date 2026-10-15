@@ -31,7 +31,7 @@ enum Lyrics {
                     fraction = Double("0." + raw[range]) ?? 0
                 }
                 let value = minutes * 60 + seconds + fraction + offset
-                guard value.isFinite else { continue }
+                guard value.isFinite, value < Double(Int.max / 1000) else { continue }
                 lines.append(LyricLine(id: UUID(), seconds: max(0, value), text: text))
             }
         }

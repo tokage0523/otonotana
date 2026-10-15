@@ -320,4 +320,86 @@ final class PlayerUITests: XCTestCase {
         attachment.lifetime = .keepAlways
         add(attachment)
     }
+
+    func testPlaylistRemovalKeepsMusicAndTrashRestoresIt() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-fixture", "--reset-ui-preferences"]
+        app.launch()
+        let rowID = "track-00000000-0000-0000-0000-000000000002"
+        app.buttons["tab-プレイリスト"].tap()
+        app.buttons["add-playlist"].tap()
+        app.textFields["collection-title"].tap(); app.textFields["collection-title"].typeText("Removal check")
+        app.buttons["collection-add-00000000-0000-0000-0000-000000000002"].tap()
+        app.buttons["collection-save"].tap()
+        app.staticTexts["Removal check"].tap()
+        app.buttons[rowID].press(forDuration: 1)
+        app.buttons["プレイリストから外す"].tap()
+        XCTAssertTrue(app.staticTexts["曲がありません"].waitForExistence(timeout: 5))
+        app.buttons["tab-ライブラリ"].tap()
+        XCTAssertTrue(app.buttons[rowID].waitForExistence(timeout: 5))
+        app.buttons[rowID].press(forDuration: 1)
+        app.buttons["ライブラリから削除"].tap()
+        app.buttons["最近削除した曲へ移す"].tap()
+        XCTAssertFalse(app.buttons[rowID].exists)
+        app.buttons["tab-設定"].tap()
+        let trash = app.buttons["settings-trash"]
+        for _ in 0..<4 { if trash.isHittable { break }; app.swipeUp() }
+        trash.tap()
+        let restore = app.buttons["trash-restore-00000000-0000-0000-0000-000000000002"]
+        XCTAssertTrue(restore.waitForExistence(timeout: 5))
+        capture(app, "20-recently-deleted")
+        restore.tap()
+        app.buttons["tab-ライブラリ"].tap()
+        XCTAssertTrue(app.buttons[rowID].waitForExistence(timeout: 5))
+    }
+
+    func testLyricsTimingControlsAndRangeMenu() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-fixture", "--reset-ui-preferences"]
+        app.launch()
+        app.buttons["track-00000000-0000-0000-0000-000000000002"].tap()
+        app.buttons["lyrics-toggle"].tap()
+        app.buttons["lyrics-options"].tap()
+        app.buttons["歌詞のタイミングを調整"].tap()
+        app.buttons["lyrics-offset-later"].tap()
+        app.buttons["lyrics-offset-later"].tap()
+        XCTAssertTrue(app.staticTexts["lyrics-offset-value"].label.contains("0.2"))
+        capture(app, "21-lyrics-timing")
+        app.buttons["補正をリセット"].tap()
+        app.buttons["閉じる"].tap()
+        let line = app.buttons["lyric-42.0"]
+        XCTAssertTrue(line.waitForExistence(timeout: 5))
+        line.press(forDuration: 1)
+        app.buttons["ここから繰り返す"].tap()
+        line.press(forDuration: 1)
+        app.buttons["ここまで繰り返す"].tap()
+        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "lyrics-loop-status").firstMatch.waitForExistence(timeout: 5))
+        capture(app, "22-lyrics-range-loop")
+        app.buttons["解除"].tap()
+        app.buttons["player-play-pause"].tap()
+    }
+
+    func testZBackupTrashRelinkAndPlaybackRecovery() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-fixture", "--data-integrity-test"]
+        app.launch()
+        let status = app.staticTexts["data-integrity-result"]
+        XCTAssertTrue(status.waitForExistence(timeout: 45))
+        let completed = NSPredicate(format: "label == %@", "データの確認が完了しました")
+        expectation(for: completed, evaluatedWith: status)
+        waitForExpectations(timeout: 45)
+        capture(app, "23-data-integrity-complete")
+        app.terminate()
+        app.launchArguments = ["--ui-test-fixture", "--restore-playback-test"]
+        app.launch()
+        let row = app.buttons["track-00000000-0000-0000-0000-000000000002"]
+        XCTAssertTrue(row.waitForExistence(timeout: 15))
+        row.tap()
+        XCTAssertEqual(app.buttons["player-play-pause"].label, "再生")
+        XCTAssertTrue(app.staticTexts["0:34"].exists)
+        capture(app, "24-restored-playback-position")
+    }
 }

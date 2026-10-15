@@ -2,10 +2,25 @@
 const $ = id => document.getElementById(id);
 const audio = $('audio');
 let rows = [], selected = 0, audioURL = null;
-const storageKey = 'otonotana-lyrics-v1';
+const storageKey = 'otonotana-projects-v2';
+const newID = () => globalThis.crypto?.randomUUID?.() || String(Date.now()) + Math.random().toString(16).slice(2);
+let activeID = newID(), projects = [], history = new EditorState.History(), expectedAudio = '';
+function snapshot() { return { version: 1, name: $('songName').value, rows, selected, audioFilename: expectedAudio }; }
+function historyControls() { $('undo').disabled = !history.past.length; $('redo').disabled = !history.future.length; }
+function checkpoint() { history.push(snapshot()); historyControls(); }
+function projectOptions() {
+  $('projects').replaceChildren(...projects.map(draft => { const option = document.createElement('option'); option.value = draft.id; option.textContent = draft.name || '名前未設定の曲'; return option; }));
+  $('projects').value = activeID;
+}
 function status(text, error = false) { $('status').textContent = text; $('status').classList.toggle('error', error); }
 function persist() {
-  try { localStorage.setItem(storageKey, JSON.stringify({ version: 1, name: $('songName').value, rows })); }
+  try {
+    const draft = { ...snapshot(), id: activeID };
+    const index = projects.findIndex(d => d.id === activeID);
+    if (index < 0) projects.push(draft); else projects[index] = draft;
+    localStorage.setItem(storageKey, JSON.stringify({ version: 2, activeID, drafts: projects }));
+    projectOptions(); historyControls();
+  }
   catch { status('自動保存が使えません。「下書きを保存」で編集内容を保存してください。', true); }
 }
 function activeIndex() {
@@ -31,27 +46,33 @@ function render() {
     seconds.onchange = () => {
       const value = seconds.value === '' ? null : Number(seconds.value);
       if (value !== null && (!Number.isFinite(value) || value < 0)) { seconds.value = row.seconds ?? ''; status('0以上の秒数を入力してください。', true); return; }
-      row.seconds = value; persist(); $('count').textContent = `${rows.filter(r => r.seconds !== null).length} / ${rows.length}行 設定済み`; highlight();
+      checkpoint(); row.seconds = value; persist(); $('count').textContent = `${rows.filter(r => r.seconds !== null).length} / ${rows.length}行 設定済み`; highlight();
     };
-    const text = document.createElement('input'); text.value = row.text; text.placeholder = '（間奏）'; text.setAttribute('aria-label', `${index + 1}行目の歌詞`); text.oninput = () => { row.text = text.value; persist(); };
+    const text = document.createElement('input'); text.value = row.text; text.placeholder = '（間奏）'; text.setAttribute('aria-label', `${index + 1}行目の歌詞`);
+    let beforeTextEdit, committedTextEdit = false;
+    text.onfocus = () => { beforeTextEdit = snapshot(); committedTextEdit = false; };
+    text.oninput = () => {
+      if (!committedTextEdit) { history.push(beforeTextEdit || snapshot()); committedTextEdit = true; }
+      row.text = text.value; persist();
+    };
     const buttons = document.createElement('div'); buttons.className = 'actions';
     buttons.append(action('選択', () => { selected = index; highlight(); }),
       action('今の時刻', () => { selected = index; stamp(false); }),
       action('−0.1秒', () => adjust(index, -0.1)), action('＋0.1秒', () => adjust(index, 0.1)),
       action('ここから再生', () => preview(index)),
-      action('削除', () => { if (!row.text || confirm('この歌詞の行を削除しますか？')) { rows.splice(index, 1); selected = Math.min(selected, Math.max(0, rows.length - 1)); persist(); render(); } }));
+      action('削除', () => { if (!row.text || confirm('この歌詞の行を削除しますか？')) { checkpoint(); rows.splice(index, 1); selected = Math.min(selected, Math.max(0, rows.length - 1)); persist(); render(); } }));
     el.append(number, seconds, text, buttons); area.append(el);
-  }); highlight();
+  }); highlight(); historyControls();
 }
 function adjust(index, delta) {
   if (rows[index].seconds === null) { status('先にこの行の時刻を設定してください。', true); return; }
-  rows[index].seconds = Math.round(Math.max(0, rows[index].seconds + delta) * 1000) / 1000;
+  checkpoint(); rows[index].seconds = Math.round(Math.max(0, rows[index].seconds + delta) * 1000) / 1000;
   persist(); render();
 }
 function stamp(advance = true) {
   if (!audioURL || !Number.isFinite(audio.duration)) { status('先に再生できる音楽ファイルを開いてください。時刻の手入力もできます。', true); return; }
   if (!rows[selected]) return;
-  rows[selected].seconds = Math.round(audio.currentTime * 1000) / 1000;
+  checkpoint(); rows[selected].seconds = Math.round(audio.currentTime * 1000) / 1000;
   if (advance) selected = Math.min(selected + 1, rows.length - 1);
   persist(); render();
   $('rows').children[selected]?.scrollIntoView({ block: 'nearest' });
@@ -70,6 +91,8 @@ function download(content, extension, type) {
 }
 $('audioFile').onchange = event => {
   const file = event.target.files[0]; if (!file) return;
+  if (expectedAudio && expectedAudio !== file.name && rows.length && !confirm('前に選んだ音楽と名前が違います。この下書きに使いますか？ 新しい曲は「新しい曲」から始められます。')) { event.target.value = ''; return; }
+  expectedAudio = file.name;
   if (audioURL) URL.revokeObjectURL(audioURL);
   audioURL = URL.createObjectURL(file); audio.src = audioURL;
   $('audioName').textContent = file.name;
@@ -82,40 +105,87 @@ $('toggle').onclick = async () => { try { if (audio.paused) await audio.play(); 
 $('back').onclick = () => { audio.currentTime = Math.max(0, audio.currentTime - 3); };
 $('append').onclick = () => {
   if (!$('paste').value.trim()) { status('歌詞を貼り付けてください。', true); return; }
-  const first = rows.length; rows.push(...$('paste').value.trim().split(/\r?\n/).map(text => ({ seconds: null, text })));
+  checkpoint(); const first = rows.length; rows.push(...$('paste').value.trim().split(/\r?\n/).map(text => ({ seconds: null, text })));
   $('paste').value = ''; selected = first; persist(); render();
 };
-$('blank').onclick = () => { rows.push({ seconds: null, text: '' }); selected = rows.length - 1; persist(); render(); };
+$('blank').onclick = () => { checkpoint(); rows.push({ seconds: null, text: '' }); selected = rows.length - 1; persist(); render(); };
 $('stamp').onclick = () => stamp();
-$('songName').oninput = persist;
+let beforeNameEdit, committedNameEdit = false;
+$('songName').onfocus = () => { beforeNameEdit = snapshot(); committedNameEdit = false; };
+$('songName').oninput = () => {
+  if (!committedNameEdit) { history.push(beforeNameEdit || snapshot()); committedNameEdit = true; }
+  persist();
+};
 $('export').onclick = () => {
   try { const content = LyricsCore.serialize(rows, audioURL ? audio.duration : undefined); download(content, '.lrc', 'text/plain;charset=utf-8'); status('LRCを保存しました。音楽ファイルと一緒にiPhoneへ渡してください。'); }
   catch (error) { status(error.message, true); }
 };
 $('draft').onclick = () => { download(JSON.stringify({ version: 1, name: $('songName').value, rows }, null, 2), '.json', 'application/json'); status('編集用の下書きを保存しました。'); };
 function validateDraft(data) {
-  if (data.version !== 1 || !Array.isArray(data.rows) || typeof data.name !== 'string') throw new Error('下書きの形式が違います。');
-  if (!data.rows.every(r => r && typeof r.text === 'string' && !/[\r\n]/.test(r.text) && (r.seconds === null || (Number.isFinite(r.seconds) && r.seconds >= 0)))) throw new Error('下書きの歌詞・時刻を読み込めません。');
-  return data;
+  return EditorState.validateDraft(data);
 }
 $('lrcFile').onchange = async event => {
   const file = event.target.files[0]; if (!file) return;
   try {
     const content = await file.text();
     let name = file.name.replace(/\.[^.]+$/, ''), imported;
-    if (file.name.toLowerCase().endsWith('.json')) { const data = validateDraft(JSON.parse(content)); imported = data.rows; name = data.name; }
+    if (file.name.toLowerCase().endsWith('.json')) {
+      const raw = JSON.parse(content);
+      if (raw.version === 2) {
+        const book = EditorState.readBook(raw, newID); persist();
+        for (const draft of book.drafts) projects.push({ ...draft, id: newID() });
+        activeID = projects.at(-book.drafts.length).id;
+        loadProject(activeID); status('下書き一覧を追加しました。'); return;
+      }
+      const data = validateDraft(raw); imported = data.rows; name = data.name;
+    }
     else { imported = LyricsCore.parse(content); if (!imported.length) throw new Error('時刻付きの歌詞が見つかりません。'); }
     if (rows.length && !confirm('現在の編集内容を読み込んだ歌詞に置き換えますか？ 必要なら先に下書きを保存してください。')) return;
-    rows = imported; $('songName').value = name; selected = 0; persist(); render(); status('歌詞を読み込みました。対応する音楽ファイルを選んで確認してください。');
+    checkpoint(); rows = imported; $('songName').value = name; selected = 0; persist(); render(); status('歌詞を読み込みました。対応する音楽ファイルを選んで確認してください。');
   } catch (error) { status(error.message, true); }
   finally { event.target.value = ''; }
 };
-$('reset').onclick = () => {
-  if (rows.length && !confirm('新しい曲の編集を始めますか？ 必要なら先にLRCまたは下書きを保存してください。')) return;
-  rows = []; selected = 0; $('songName').value = ''; $('paste').value = ''; audio.pause(); audio.removeAttribute('src'); audio.load();
+function closeAudio() {
+  audio.pause(); audio.removeAttribute('src'); audio.load();
   if (audioURL) URL.revokeObjectURL(audioURL); audioURL = null; $('audioFile').value = ''; $('audioName').textContent = 'ファイル未選択'; persist(); render(); highlight(); status('新しい曲の編集を始められます。');
+}
+function loadProject(id) {
+  const draft = projects.find(d => d.id === id); if (!draft) return;
+  activeID = id; rows = JSON.parse(JSON.stringify(draft.rows)); selected = Math.min(draft.selected || 0, Math.max(0, rows.length - 1));
+  expectedAudio = draft.audioFilename || ''; $('songName').value = draft.name; $('paste').value = '';
+  history = new EditorState.History(); closeAudio(); persist(); render();
+}
+function newProject() { persist(); activeID = newID(); projects.push({ version: 1, id: activeID, name: '', rows: [] }); loadProject(activeID); }
+$('reset').onclick = newProject; $('newProject').onclick = newProject;
+$('projects').onchange = event => { const id = event.target.value; persist(); loadProject(id); status('下書きを切り替えました。対応する音楽を選んでください。'); };
+$('deleteProject').onclick = () => {
+  if (!confirm('この下書きを削除しますか？ この操作は元に戻せません。音楽ファイルは削除しません。')) return;
+  projects = projects.filter(d => d.id !== activeID);
+  if (!projects.length) projects.push({ version: 1, id: newID(), name: '', rows: [] });
+  loadProject(projects[0].id);
 };
-document.addEventListener('keydown', event => { if (event.ctrlKey && event.key === 'Enter') { event.preventDefault(); stamp(); } });
-try { const saved = localStorage.getItem(storageKey); if (saved) { const data = validateDraft(JSON.parse(saved)); rows = data.rows; $('songName').value = data.name; status('前回の下書きを復元しました。音楽ファイルをもう一度選んでください。'); } }
+$('exportProjects').onclick = () => { persist(); download(JSON.stringify({ version: 2, activeID, drafts: projects }, null, 2), '.json', 'application/json'); status('全下書きを保存しました。'); };
+function restoreState(state) { if (!state) return; rows = state.rows; selected = state.selected || 0; $('songName').value = state.name; expectedAudio = state.audioFilename || ''; persist(); render(); }
+$('undo').onclick = () => restoreState(history.undo(snapshot()));
+$('redo').onclick = () => restoreState(history.redo(snapshot()));
+$('shift').onclick = () => {
+  try {
+    const delta = Number($('shiftSeconds').value);
+    if (!$('shiftSeconds').value || !rows.length) throw new Error('歌詞とずらす秒数を確認してください。');
+    const shifted = LyricsCore.shift(rows, delta, $('shiftTarget').value === 'selected' ? selected : 0);
+    checkpoint(); rows = shifted; persist(); render(); status('時刻をまとめて調整しました。元に戻すこともできます。');
+  } catch (error) { status(error.message, true); }
+};
+document.addEventListener('keydown', event => {
+  if (event.ctrlKey && event.key === 'Enter') { event.preventDefault(); stamp(); }
+  if (event.ctrlKey && !event.target.matches('input,textarea') && ['z', 'y'].includes(event.key.toLowerCase())) {
+    event.preventDefault(); (event.key.toLowerCase() === 'y' || event.shiftKey ? $('redo') : $('undo')).click();
+  }
+});
+try {
+  const saved = localStorage.getItem(storageKey) || localStorage.getItem('otonotana-lyrics-v1');
+  if (saved) { const book = EditorState.readBook(JSON.parse(saved), newID); projects = book.drafts; loadProject(book.activeID); status('前回の下書きを復元しました。音楽ファイルをもう一度選んでください。'); }
+  else { projects = [{ version: 1, id: activeID, name: '', rows: [] }]; persist(); }
+}
 catch { status('下書きを復元できません。保存した下書きファイルから読み込めます。', true); }
 render();

@@ -8,6 +8,7 @@ on:
       - 'Checks/main.swift'
       - 'Checks/UI/**'
       - 'PCEditor/lyrics-core*'
+      - 'PCEditor/editor*'
       - 'project.yml'
       - '.github/workflows/build-ios.yml'
 permissions:
@@ -23,7 +24,8 @@ jobs:
       - name: Check lyric formats
         run: |
           node PCEditor/lyrics-core.test.cjs
-          swiftc Sources/Lyrics.swift Sources/Track.swift Sources/LibraryModels.swift Checks/main.swift -o "$RUNNER_TEMP/check-lyrics"
+          node PCEditor/editor-state.test.cjs
+          swiftc Sources/Lyrics.swift Sources/Track.swift Sources/LibraryModels.swift Sources/LibraryStorage.swift Sources/BackupFiles.swift Checks/main.swift -o "$RUNNER_TEMP/check-lyrics"
           "$RUNNER_TEMP/check-lyrics"
       - name: Generate Xcode project
         run: |

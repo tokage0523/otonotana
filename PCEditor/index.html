@@ -13,6 +13,7 @@
   button:hover,.file:hover{background:#f0efff}button.primary{background:#5852be;border-color:#5852be;color:white}button:disabled{opacity:.45;cursor:default}
   button:focus-visible,input:focus-visible,textarea:focus-visible,.file:focus-within{outline:3px solid #ada8ff;outline-offset:2px}
   input,textarea{font:inherit;border:1px solid #d8dbe7;border-radius:8px;padding:9px;background:#fff;color:#202437;width:100%}
+  select{font:inherit;border:1px solid #d8dbe7;border-radius:8px;padding:9px;background:#fff;color:#202437;max-width:100%}#projects{min-width:200px}
   textarea{min-height:230px;resize:vertical;line-height:1.8}.bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
   audio{width:100%;margin-top:16px}label{font-size:14px}.hint{font-size:13px;color:#666b80}.clock{font-size:25px;font-variant-numeric:tabular-nums;font-weight:650;margin:12px 0}
   .file input{position:absolute;width:1px;height:1px;opacity:0}.row{display:grid;grid-template-columns:28px 108px 1fr;gap:8px;align-items:center;padding:12px;border:1px solid #e4e5ef;border-radius:12px;margin-top:10px}
@@ -25,6 +26,11 @@
   <div class="brand">音の棚 / PC用 歌詞エディター</div>
   <h1>好きな一節へ、すぐ戻れる。</h1>
   <p>音楽を聴きながら歌詞の始まりを設定。保存した歌詞をiPhoneで読み込むと、タップした一節から再生できます。</p>
+  <section class="card">
+    <h2>編集する曲の下書き</h2>
+    <div class="bar"><select id="projects" aria-label="編集する下書き"></select><button id="newProject">新しい曲</button><button id="deleteProject">この下書きを削除</button><button id="exportProjects">全下書きを保存</button></div>
+    <p class="hint">曲ごとに編集途中を保存します。切り替えたら、その曲の音楽ファイルを選び直してください。</p>
+  </section>
   <section class="card">
     <h2>1. 音楽を開く</h2>
     <div class="bar"><label class="file">音楽ファイルを選ぶ<input id="audioFile" type="file" accept="audio/*,.m4a"></label><span id="audioName" class="hint">ファイル未選択</span></div>
@@ -48,7 +54,9 @@
     </section>
     <section class="card">
       <div class="title"><h2>3. 歌詞の始まりを設定</h2><span id="count" class="hint">0行</span></div>
-      <div class="bar"><button id="stamp" class="primary">選択行に今の時刻 → 次の行</button></div>
+      <div class="bar"><button id="stamp" class="primary">選択行に今の時刻 → 次の行</button><button id="undo">元に戻す</button><button id="redo">やり直す</button></div>
+      <div class="bar" style="margin-top:12px"><select id="shiftTarget" aria-label="ずらす範囲"><option value="all">歌詞全体</option><option value="selected">選択行から最後まで</option></select><input id="shiftSeconds" type="number" value="0.1" step="0.1" aria-label="ずらす秒数" style="width:95px"><span>秒</span><button id="shift">時刻をまとめてずらす</button></div>
+      <p class="hint">正の値で遅く、負の値で早くなります。0秒より前になる行は0秒になります。</p>
       <p class="hint">行の「選択」で対象を変えられます。「ここから再生」で確認し、秒数を直接入力して微調整。Ctrl＋Enterでも時刻を付けられます。</p>
       <div id="rows"><div class="empty">左側から歌詞を追加してください。</div></div>
     </section>
@@ -56,5 +64,6 @@
   <p id="status" class="status" role="status" aria-live="polite"></p>
 </main>
 <script src="lyrics-core.js"></script>
+<script src="editor-state.js"></script>
 <script src="editor.js"></script>
 </html>
