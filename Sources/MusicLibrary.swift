@@ -21,6 +21,7 @@ final class MusicLibrary: NSObject, ObservableObject, AVAudioPlayerDelegate {
     }
     @Published private(set) var duration: Double = 0
     @Published private(set) var importing = false
+    @Published private(set) var sharedImportIssues: [SharedImportIssue] = []
     @Published var message: String?
     @Published var playerPresented = false
     @Published private(set) var artworkImage: UIImage?
@@ -53,6 +54,8 @@ final class MusicLibrary: NSObject, ObservableObject, AVAudioPlayerDelegate {
         directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Music", isDirectory: true)
         super.init()
+        if let data = try? Data(contentsOf: directory.appendingPathComponent("import-issues.json")),
+           let issues = try? JSONDecoder().decode([SharedImportIssue].self, from: data) { sharedImportIssues = issues }
         do {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             if FileManager.default.fileExists(atPath: indexURL.path) {
@@ -180,7 +183,7 @@ final class MusicLibrary: NSObject, ObservableObject, AVAudioPlayerDelegate {
                     if !alreadyShared { try FileManager.default.copyItem(at: source, to: target) }
                     do {
                         // Decode before committing the library entry; no conversion is performed.
-                        _ = try AVAudioPlayer(contentsOf: target)
+                        _ = try await AudioImportValidator.duration(at: target)
                         var value = Track(id: id, title: source.deletingPathExtension().lastPathComponent, filename: filename)
                         value.sharedPath = String(target.standardizedFileURL.path.dropFirst(root.count))
                         value.addedAt = Date()
@@ -191,6 +194,10 @@ final class MusicLibrary: NSObject, ObservableObject, AVAudioPlayerDelegate {
                     }
                 }.value
                 do {
+                    if let path = track.sharedPath {
+                        failedStamps[path] = nil
+                        sharedImportIssues.removeAll { $0.path == path }
+                    }
                     if tracks.contains(where: { $0.sharedPath == track.sharedPath }) { continue }
                     let updated = tracks + [track]
                     try save(updated)
@@ -310,35 +317,47 @@ final class MusicLibrary: NSObject, ObservableObject, AVAudioPlayerDelegate {
                 for case let url as URL in walker {
                     let values = try url.resourceValues(forKeys: Set(keys))
                     guard values.isRegularFile == true, values.isSymbolicLink != true,
-                          SharedFiles.audioExtensions.contains(url.pathExtension.lowercased()), (values.fileSize ?? 0) > 0 else { continue }
+                          SharedFiles.audioExtensions.contains(url.pathExtension.lowercased()) else { continue }
                     let path = String(url.path.dropFirst(root.path.count + 1))
                     let stamp = "\(values.fileSize ?? 0):\(values.contentModificationDate?.timeIntervalSince1970 ?? 0)"
                     found.append((path, stamp))
                 }
                 return found.sorted { $0.0 < $1.0 }
             }.value
+            sharedImportIssues.removeAll { issue in !files.contains { $0.0 == issue.path } }
+            var newFailures = 0
             for (path, stamp) in files {
                 guard let url = SharedFiles.safeURL(path, under: root) else { continue }
                 if failedStamps[path] == stamp { continue }
+                var stage = "音楽ファイルの読み込み"
                 do {
                     let id: UUID
                     if let existing = tracks.first(where: { $0.sharedPath == path }) {
                         id = existing.id
                         if existing.fileStamp != stamp {
-                            _ = try await Task.detached { try AVAudioPlayer(contentsOf: url).duration }.value
+                            _ = try await AudioImportValidator.duration(at: url)
+                            stage = "曲一覧の保存"
                             var latest = tracks.first { $0.id == id }!
                             latest.fileStamp = stamp; try commitTrack(latest)
                         }
                     } else {
-                        _ = try await Task.detached { try AVAudioPlayer(contentsOf: url).duration }.value
+                        _ = try await AudioImportValidator.duration(at: url)
+                        stage = "曲一覧の保存"
                         var track = Track(id: UUID(), title: url.deletingPathExtension().lastPathComponent, filename: url.lastPathComponent)
                         track.sharedPath = path; track.fileStamp = stamp; track.addedAt = Date(); id = track.id
                         let updated = tracks + [track]; try save(updated); tracks = updated
                         await readMetadata(for: id, replaceTitle: true)
                     }
-                    if tracks.first(where: { $0.id == id })?.metadataVersion != 3 { await readMetadata(for: id) }
+                    if tracks.first(where: { $0.id == id })?.metadataVersion != 4 { await readMetadata(for: id) }
                     await updateSidecars(audio: url, id: id)
+                    sharedImportIssues.removeAll { $0.path == path }
                     #if DEBUG
+                    if ProcessInfo.processInfo.arguments.contains("--m4a-test-fixture"), path.hasSuffix(".m4a") {
+                        let registered = tracks.filter { $0.sharedPath == path }
+                        assert(registered.count == 1)
+                        assert(audioURL(for: registered[0]).standardizedFileURL == url.standardizedFileURL)
+                        assert(!FileManager.default.fileExists(atPath: directory.appendingPathComponent(url.lastPathComponent).path))
+                    }
                     if ProcessInfo.processInfo.arguments.contains("--shared-test-fixture"), path == "Shared test.wav" {
                         let registered = tracks.filter { $0.sharedPath == path }
                         assert(registered.count == 1, "Repeated shared scans must not duplicate tracks")
@@ -351,9 +370,15 @@ final class MusicLibrary: NSObject, ObservableObject, AVAudioPlayerDelegate {
                     #endif
                 } catch {
                     failedStamps[path] = stamp
-                    message = "\(url.lastPathComponent)を登録できませんでした。転送完了後に設定の再読み込みを試してください。"
+                    sharedImportIssues.removeAll { $0.path == path }
+                    sharedImportIssues.append(SharedImportIssue(path: path, stage: stage, url: url, error: error))
+                    newFailures += 1
                 }
             }
+            if let data = try? JSONEncoder().encode(sharedImportIssues) {
+                try? data.write(to: directory.appendingPathComponent("import-issues.json"), options: .atomic)
+            }
+            if newFailures > 0 { message = "\(newFailures)件の音楽を登録できませんでした。設定の「読み込み結果」で原因を確認できます。" }
         } catch { message = "共有ファイルを確認できませんでした：\(error.localizedDescription)" }
     }
 
@@ -410,6 +435,7 @@ final class MusicLibrary: NSObject, ObservableObject, AVAudioPlayerDelegate {
             let items = try await asset.load(.commonMetadata)
             var title: String?, artist: String?, album: String?, imageData: Data?
             var albumArtist: String?, trackNumber: Int?, discNumber: Int?
+            var genre: String?, composer: String?, releaseYear: Int?
             for item in items {
                 switch item.commonKey {
                 case .commonKeyTitle: title = try? await item.load(.stringValue)
@@ -423,6 +449,11 @@ final class MusicLibrary: NSObject, ObservableObject, AVAudioPlayerDelegate {
             for format in formats {
                 for item in (try? await asset.loadMetadata(for: format)) ?? [] {
                     if item.identifier == .iTunesMetadataAlbumArtist { albumArtist = try? await item.load(.stringValue) }
+                    if item.identifier == .iTunesMetadataUserGenre { genre = try? await item.load(.stringValue) }
+                    if item.identifier == .iTunesMetadataComposer { composer = try? await item.load(.stringValue) }
+                    if item.identifier == .iTunesMetadataReleaseDate, let raw = try? await item.load(.stringValue) {
+                        releaseYear = Int(raw.prefix(4))
+                    }
                     if item.identifier == .iTunesMetadataTrackNumber || item.identifier == .iTunesMetadataDiscNumber {
                         let number: Int?
                         if let data = try? await item.load(.dataValue), data.count >= 4 {
@@ -441,7 +472,10 @@ final class MusicLibrary: NSObject, ObservableObject, AVAudioPlayerDelegate {
             if latest.albumArtist == nil { latest.albumArtist = albumArtist }
             if latest.trackNumber == nil { latest.trackNumber = trackNumber }
             if latest.discNumber == nil { latest.discNumber = discNumber }
-            latest.metadataVersion = 3
+            if latest.genre == nil { latest.genre = genre }
+            if latest.composer == nil { latest.composer = composer }
+            if latest.releaseYear == nil { latest.releaseYear = releaseYear }
+            latest.metadataVersion = 4
             try commitTrack(latest)
             if let imageData, latest.artworkFilename == nil { try storeArtwork(imageData, for: id) }
         } catch {
@@ -506,10 +540,13 @@ final class MusicLibrary: NSObject, ObservableObject, AVAudioPlayerDelegate {
         } catch { message = "ジャケットを変更できませんでした：\(error.localizedDescription)" }
     }
 
-    func updateDetails(for id: UUID, title: String, artist: String, album: String, albumArtist: String = "", trackNumber: Int? = nil) {
+    func updateDetails(for id: UUID, title: String, artist: String, album: String, albumArtist: String = "", trackNumber: Int? = nil,
+                       discNumber: Int? = nil, genre: String? = nil, releaseYear: Int? = nil, composer: String? = nil, notes: String? = nil) {
         guard var track = tracks.first(where: { $0.id == id }) else { return }
         let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanTitle.isEmpty else { message = "曲名を入力してください。"; return }
+        guard [trackNumber, discNumber, releaseYear].allSatisfy({ $0 == nil || $0! > 0 }),
+              releaseYear == nil || releaseYear! <= 9999 else { message = "収録順・ディスク番号は1以上、発売年は1〜9999で入力してください。"; return }
         track.title = cleanTitle
         track.artist = artist.trimmingCharacters(in: .whitespacesAndNewlines)
         let cleanAlbum = album.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -517,6 +554,11 @@ final class MusicLibrary: NSObject, ObservableObject, AVAudioPlayerDelegate {
         track.album = cleanAlbum
         track.albumArtist = albumArtist.trimmingCharacters(in: .whitespacesAndNewlines)
         track.trackNumber = trackNumber
+        track.discNumber = discNumber
+        track.genre = genre?.nonEmpty
+        track.releaseYear = releaseYear
+        track.composer = composer?.nonEmpty
+        track.notes = notes?.nonEmpty
         do { try commitTrack(track) }
         catch { message = "曲の情報を保存できませんでした：\(error.localizedDescription)" }
     }

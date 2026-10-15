@@ -26,6 +26,11 @@ edited.album = "アルバム"
 edited.artworkFilename = "cover.jpg"
 edited.favorite = true
 edited.lyrics = lines
+edited.discNumber = 2
+edited.genre = "Game"
+edited.releaseYear = 2026
+edited.composer = "Composer"
+edited.notes = "My notes"
 let restored = try JSONDecoder().decode(Track.self, from: JSONEncoder().encode(edited))
 check(restored == edited && restored.isFavorite, "artwork metadata and lyrics round trip")
 print("Library compatibility and metadata checks passed.")

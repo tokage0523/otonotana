@@ -79,10 +79,10 @@ final class PlayerUITests: XCTestCase {
         app.terminate(); app.launchArguments = ["--ui-test-fixture"]; app.launch()
         XCTAssertTrue(app.buttons["mode-曲"].waitForExistence(timeout: 15))
         XCTAssertEqual(backgroundPixels(), light)
-        choose("本体設定に合わせる")
+        choose("システム設定に従う")
         app.buttons["tab-設定"].tap()
         let picker = app.buttons["settings-appearance"]
-        XCTAssertTrue((picker.label + " " + (picker.value as? String ?? "")).contains("本体設定に合わせる"))
+        XCTAssertTrue((picker.label + " " + (picker.value as? String ?? "")).contains("システム設定に従う"))
         capture(app, "15-appearance-settings")
     }
 
@@ -229,6 +229,84 @@ final class PlayerUITests: XCTestCase {
         app.buttons["player-play-pause"].tap()
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label MATCHES %@", "^0:1[2-9]$")).firstMatch.exists)
         capture(app, "09-shared-lyrics")
+    }
+
+    func testDirectM4AAACAndALACRegisterAndDecode() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-fixture", "--m4a-test-fixture"]
+        app.launch()
+        for name in ["直接AAC (Instrumental)", "直接ALAC"] {
+            let search = app.textFields["library-search"]
+            search.tap()
+            if let value = search.value as? String, value.contains("直接") {
+                app.buttons["検索を消す"].tap(); search.tap()
+            }
+            search.typeText(name)
+            let row = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", name + ",")).firstMatch
+            XCTAssertTrue(row.waitForExistence(timeout: 20))
+            row.tap()
+            XCTAssertTrue(app.staticTexts["player-track-title"].waitForExistence(timeout: 5))
+            XCTAssertEqual(app.staticTexts["player-track-title"].label, name)
+            XCTAssertFalse(app.alerts.firstMatch.exists)
+            app.buttons["閉じる"].tap()
+        }
+        capture(app, "16-direct-m4a")
+    }
+
+    func testTrackInformationLabelsAndNewFieldsPersist() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-fixture", "--reset-ui-preferences"]
+        app.launch()
+        func openDetails() {
+            let row = app.buttons["track-00000000-0000-0000-0000-000000000002"]
+            XCTAssertTrue(row.waitForExistence(timeout: 15))
+            row.press(forDuration: 1)
+            app.buttons["曲の情報を編集"].tap()
+            XCTAssertTrue(app.textFields["曲名"].waitForExistence(timeout: 5))
+        }
+        func field(_ name: String) -> XCUIElement {
+            let result = app.textFields[name]
+            for _ in 0..<5 {
+                if result.isHittable { break }
+                app.swipeUp()
+            }
+            return result
+        }
+        openDetails()
+        XCTAssertTrue(app.staticTexts["曲名"].exists)
+        XCTAssertTrue(app.staticTexts["アーティスト"].exists)
+        XCTAssertEqual(app.textFields["曲名"].value as? String, "Afterglow")
+        capture(app, "17-labeled-track-information")
+        // Leave the old title/artist intact and add information that was absent.
+        let genre = field("ジャンル"); genre.tap(); genre.typeText("Test Genre")
+        let year = field("発売年"); year.tap(); year.typeText("2026")
+        let composer = field("作曲者"); composer.tap(); composer.typeText("Test Composer")
+        app.buttons["保存"].tap()
+        app.terminate(); app.launchArguments = ["--ui-test-fixture"]; app.launch()
+        openDetails()
+        XCTAssertEqual(field("ジャンル").value as? String, "Test Genre")
+        XCTAssertEqual(field("発売年").value as? String, "2026")
+        XCTAssertEqual(field("作曲者").value as? String, "Test Composer")
+        capture(app, "18-extra-track-information")
+        app.buttons["キャンセル"].tap()
+    }
+
+    func testUnreadableSharedFileReportsDetailsWithoutBlockingValidFiles() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-fixture", "--m4a-test-fixture", "--broken-test-fixture"]
+        app.launch()
+        XCTAssertTrue(app.alerts.firstMatch.waitForExistence(timeout: 20))
+        app.alerts.buttons["OK"].tap()
+        app.buttons["tab-設定"].tap()
+        let results = app.buttons["shared-import-results"]
+        for _ in 0..<5 { if results.isHittable { break }; app.swipeUp() }
+        results.tap()
+        XCTAssertTrue(app.staticTexts["音楽ファイルを開けませんでした。ファイルの内容や転送状態の確認が必要です。"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "エラー：")).firstMatch.exists)
+        capture(app, "19-shared-import-details")
     }
 
     private func capture(_ app: XCUIApplication, _ name: String) {

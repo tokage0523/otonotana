@@ -1,6 +1,7 @@
 #if DEBUG
 import Foundation
 import UIKit
+import AVFoundation
 
 extension MusicLibrary {
     func prepareUITestFixture() {
@@ -34,7 +35,29 @@ extension MusicLibrary {
                 if !FileManager.default.fileExists(atPath: target.path) { try FileManager.default.copyItem(at: audioURL(for: track), to: target) }
                 try "[00:00.000]共有ファイルの歌詞\n[00:12.000]次の行".write(to: target.deletingPathExtension().appendingPathExtension("lrc"), atomically: true, encoding: .utf8)
             }
+            if ProcessInfo.processInfo.arguments.contains("--m4a-test-fixture") {
+                let folder = sharedDirectory.appendingPathComponent("共有 テスト", isDirectory: true)
+                try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+                for (name, codec) in [("直接AAC (Instrumental)", kAudioFormatMPEG4AAC), ("直接ALAC", kAudioFormatAppleLossless)] {
+                    try makeM4AFixture(at: folder.appendingPathComponent(name).appendingPathExtension("m4a"), codec: codec)
+                }
+                if ProcessInfo.processInfo.arguments.contains("--broken-test-fixture") {
+                    try Data("invalid audio".utf8).write(to: folder.appendingPathComponent("Broken.m4a"))
+                }
+            }
         } catch { message = error.localizedDescription }
+    }
+
+    private func makeM4AFixture(at url: URL, codec: AudioFormatID) throws {
+        guard !FileManager.default.fileExists(atPath: url.path) else { return }
+        var settings: [String: Any] = [AVFormatIDKey: codec, AVSampleRateKey: 44100.0, AVNumberOfChannelsKey: 1]
+        if codec == kAudioFormatMPEG4AAC { settings[AVEncoderBitRateKey] = 64000 }
+        else { settings[AVEncoderBitDepthHintKey] = 16 }
+        let file = try AVAudioFile(forWriting: url, settings: settings)
+        let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: 44100)!
+        buffer.frameLength = 44100
+        for frame in 0..<44100 { buffer.floatChannelData![0][frame] = Float(sin(Double(frame) * 2 * .pi * 440 / 44100) * 0.1) }
+        for _ in 0..<12 { try file.write(from: buffer) }
     }
 }
 #endif

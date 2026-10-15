@@ -85,6 +85,10 @@ struct SettingsView: View {
                     Picker("アプリの外観", selection: $appearance) {
                         ForEach(AppAppearance.allCases) { Text($0.name).tag($0.rawValue).accessibilityIdentifier("appearance-\($0.rawValue)") }
                     }.pickerStyle(.navigationLink).accessibilityIdentifier("settings-appearance")
+                    if appearance == AppAppearance.system.rawValue {
+                        Text("iPhoneのライト／ダーク設定と連動します。")
+                            .font(.footnote).foregroundStyle(.secondary)
+                    }
                     Picker("再生画面のテーマ", selection: $theme) { ForEach(PlayerTheme.allCases) { Text($0.name).tag($0.rawValue) } }
                     Toggle("ジャケットの下に歌詞を表示", isOn: $preview)
                 }
@@ -103,8 +107,18 @@ struct SettingsView: View {
                         Task { refreshing = true; await library.rescanSharedFiles(); refreshing = false }
                     } label: { HStack { Text("共有ファイルを再読み込み"); if refreshing { ProgressView() } } }
                         .disabled(refreshing).accessibilityIdentifier("rescan-shared-files")
+                    if !library.sharedImportIssues.isEmpty {
+                        NavigationLink("読み込み結果（\(library.sharedImportIssues.count)件）") {
+                            List(library.sharedImportIssues) { issue in
+                                Section(issue.path) {
+                                    Text(issue.reason)
+                                    Text(issue.details).font(.footnote).foregroundStyle(.secondary).textSelection(.enabled)
+                                }
+                            }.navigationTitle("読み込み結果")
+                        }.accessibilityIdentifier("shared-import-results")
+                    }
                 }
-                Section { Text("音の棚 0.3.2").foregroundStyle(.secondary) }
+                Section { Text("音の棚 0.3.3").foregroundStyle(.secondary) }
             }.navigationTitle("設定")
         }
     }

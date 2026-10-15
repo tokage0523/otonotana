@@ -246,35 +246,73 @@ struct TrackDetailsView: View {
     @State private var album = ""
     @State private var albumArtist = ""
     @State private var trackNumber = ""
+    @State private var discNumber = ""
+    @State private var genre = ""
+    @State private var releaseYear = ""
+    @State private var composer = ""
+    @State private var notes = ""
+    private var validNumbers: Bool {
+        [trackNumber, discNumber, releaseYear].allSatisfy { $0.isEmpty || (Int($0).map { $0 > 0 } ?? false) }
+            && (releaseYear.isEmpty || (Int(releaseYear).map { $0 <= 9999 } ?? false))
+    }
     var body: some View {
         NavigationStack {
             Form {
                 Section("曲の情報") {
-                    TextField("曲名", text: $title)
-                    TextField("アーティスト", text: $artist)
-                    TextField("アルバム", text: $album)
-                    TextField("アルバムアーティスト", text: $albumArtist)
-                    TextField("収録順", text: $trackNumber).keyboardType(.numberPad)
+                    informationField("曲名", text: $title)
+                    informationField("アーティスト", text: $artist)
+                    informationField("アルバム", text: $album)
+                    informationField("アルバムアーティスト", text: $albumArtist)
                 }
-            }.navigationTitle("曲の情報")
+                Section("収録情報") {
+                    informationField("収録順", text: $trackNumber, numeric: true)
+                    informationField("ディスク番号", text: $discNumber, numeric: true)
+                    informationField("ジャンル", text: $genre)
+                    informationField("発売年", text: $releaseYear, numeric: true)
+                    informationField("作曲者", text: $composer)
+                    if !validNumbers { Text("収録順・ディスク番号は1以上、発売年は1〜9999で入力してください。").font(.footnote).foregroundStyle(.red) }
+                }
+                Section("メモ") {
+                    TextField("自由に記入", text: $notes, axis: .vertical).lineLimit(3...6).accessibilityLabel("メモ")
+                }
+                Section("ファイル") {
+                    LabeledContent("ファイル名") { Text(track.filename).textSelection(.enabled).multilineTextAlignment(.trailing) }
+                    LabeledContent("ファイル形式", value: track.filename.split(separator: ".").last.map { String($0).uppercased() } ?? "不明")
+                    if let size = (try? library.audioURL(for: track).resourceValues(forKeys: [.fileSizeKey]))?.fileSize {
+                        LabeledContent("サイズ", value: ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file))
+                    }
+                    Text("編集内容は音の棚に保存されます。").font(.footnote).foregroundStyle(.secondary)
+                }
+            }.navigationTitle("曲の情報").scrollDismissesKeyboard(.interactively)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) { Button("キャンセル") { dismiss() } }
                     ToolbarItem(placement: .confirmationAction) {
                         Button("保存") {
                             library.updateDetails(for: track.id, title: title, artist: artist, album: album,
-                                                  albumArtist: albumArtist, trackNumber: Int(trackNumber))
+                                                  albumArtist: albumArtist, trackNumber: Int(trackNumber), discNumber: Int(discNumber),
+                                                  genre: genre, releaseYear: Int(releaseYear), composer: composer, notes: notes)
                             if library.message == nil { dismiss() }
-                        }.disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        }.disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !validNumbers)
                     }
                 }
                 .onAppear {
                     title = track.title; artist = track.artist ?? ""; album = track.album ?? ""
                     albumArtist = track.albumArtist ?? ""; trackNumber = track.trackNumber.map(String.init) ?? ""
+                    discNumber = track.discNumber.map(String.init) ?? ""; genre = track.genre ?? ""
+                    releaseYear = track.releaseYear.map(String.init) ?? ""; composer = track.composer ?? ""; notes = track.notes ?? ""
                 }
                 .alert("保存できませんでした", isPresented: Binding(
                     get: { library.message != nil }, set: { if !$0 { library.message = nil } }
                 )) { Button("OK") { library.message = nil } } message: { Text(library.message ?? "") }
         }
+    }
+
+    private func informationField(_ name: String, text: Binding<String>, numeric: Bool = false) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(name).font(.caption).foregroundStyle(.secondary)
+            TextField(name, text: text).keyboardType(numeric ? .numberPad : .default)
+                .accessibilityLabel(name)
+        }.padding(.vertical, 3)
     }
 }
 

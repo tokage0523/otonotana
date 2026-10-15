@@ -6,7 +6,7 @@ enum AppAppearance: String, CaseIterable, Identifiable {
     var id: String { rawValue }
     var name: String {
         switch self {
-        case .system: return "本体設定に合わせる"
+        case .system: return "システム設定に従う"
         case .light: return "ライト"
         case .dark: return "ダーク"
         }
