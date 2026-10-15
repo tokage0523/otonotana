@@ -27,6 +27,7 @@ final class MusicLibrary: NSObject, ObservableObject, AVAudioPlayerDelegate {
     @Published private(set) var lyricLoop: PlaybackLoop?
     @Published var message: String?
     @Published var playerPresented = false
+    @Published var trackPendingDeletion: Track?
     @Published private(set) var artworkImage: UIImage?
     @Published private(set) var artworkTint = UIColor(red: 0.28, green: 0.23, blue: 0.38, alpha: 1)
 
@@ -638,7 +639,8 @@ final class MusicLibrary: NSObject, ObservableObject, AVAudioPlayerDelegate {
         if !playing { resume() }
     }
 
-    func remove(_ track: Track) {
+    func remove(_ requested: Track) {
+        guard let track = tracks.first(where: { $0.id == requested.id }) else { return }
         let id = UUID()
         let source = audioURL(for: track)
         let name = FileManager.default.fileExists(atPath: source.path) ? id.uuidString + "." + source.pathExtension : nil

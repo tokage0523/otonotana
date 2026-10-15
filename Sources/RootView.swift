@@ -32,6 +32,16 @@ struct RootView: View {
                 }
             }.padding(.horizontal, 12)
         }.background(Color(.systemGroupedBackground)).tint(.indigo)
+            .confirmationDialog("「\(library.trackPendingDeletion?.title ?? "")」をライブラリから削除しますか？",
+                                isPresented: Binding(get: { library.trackPendingDeletion != nil },
+                                                     set: { if !$0 { library.trackPendingDeletion = nil } }),
+                                titleVisibility: .visible, presenting: library.trackPendingDeletion) { track in
+                Button("最近削除した曲へ移す", role: .destructive) {
+                    library.trackPendingDeletion = nil
+                    library.remove(track)
+                }
+                Button("キャンセル", role: .cancel) { library.trackPendingDeletion = nil }
+            } message: { _ in Text("プレイリストからも外れます。設定の「最近削除した曲」から復元できます。") }
             .preferredColorScheme((AppAppearance(rawValue: appearance) ?? .system).colorScheme)
             .sheet(isPresented: $library.playerPresented) { PlayerView().environmentObject(library) }
             .alert("お知らせ", isPresented: Binding(get: { library.message != nil && !library.playerPresented },

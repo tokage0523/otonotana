@@ -89,7 +89,11 @@ struct LibraryView: View {
             switch mode {
             case .songs:
                 List {
-                    Section("\(visibleTracks.count)曲 · 名前順") { ForEach(visibleTracks) { TrackRow(track: $0, context: visibleTracks) } }
+                    Section {
+                        ForEach(visibleTracks) { TrackRow(track: $0, context: visibleTracks) }
+                    } header: {
+                        Text("\(visibleTracks.count)曲 · 名前順").accessibilityIdentifier("library-song-count")
+                    }.id("library-songs")
                 }.listStyle(.plain).scrollContentBackground(.hidden)
             case .albums:
                 ScrollView {
@@ -141,7 +145,6 @@ struct TrackRow: View {
     var removeFavoriteOnly = false
     var accessibilityPrefix = "track"
     @State private var editing = false
-    @State private var confirmDelete = false
     var body: some View {
         Button {
             library.select(track, context: context); library.playerPresented = true
@@ -162,7 +165,9 @@ struct TrackRow: View {
             .swipeActions(allowsFullSwipe: false) {
                 if let playlistID { Button("プレイリストから外す", role: .destructive) { library.removeFromPlaylist(track.id, playlistID: playlistID) } }
                 else if removeFavoriteOnly { Button("お気に入りから外す") { library.toggleFavorite(track) }.tint(.orange) }
-                else { Button("ライブラリから削除", role: .destructive) { confirmDelete = true } }
+                // This action only requests confirmation. A destructive swipe role would
+                // optimistically remove the UIKit row before the catalogue changes.
+                else { Button("ライブラリから削除") { library.trackPendingDeletion = track }.tint(.red) }
             }
             .contextMenu {
                 Button("曲の情報を編集", systemImage: "pencil") { editing = true }
@@ -172,11 +177,8 @@ struct TrackRow: View {
                     Button("最後に再生", systemImage: "text.append") { library.enqueue(track, next: false) }
                 }
                 if let playlistID { Button("プレイリストから外す", systemImage: "minus.circle") { library.removeFromPlaylist(track.id, playlistID: playlistID) } }
-                Button("ライブラリから削除", systemImage: "trash", role: .destructive) { confirmDelete = true }
+                Button("ライブラリから削除", systemImage: "trash", role: .destructive) { library.trackPendingDeletion = track }
             }
-            .confirmationDialog("「\(track.title)」をライブラリから削除しますか？", isPresented: $confirmDelete) {
-                Button("最近削除した曲へ移す", role: .destructive) { library.remove(track) }
-            } message: { Text("プレイリストからも外れます。設定の「最近削除した曲」から復元できます。") }
             .sheet(isPresented: $editing) { TrackDetailsView(track: track).environmentObject(library) }
     }
 }

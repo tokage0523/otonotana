@@ -381,6 +381,64 @@ final class PlayerUITests: XCTestCase {
         app.buttons["player-play-pause"].tap()
     }
 
+    func testSwipeDeleteCancelAndConsecutiveRowsStayConsistent() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-fixture", "--reset-ui-preferences", "--swipe-delete-fixture"]
+        app.launch()
+        let a = "track-00000000-0000-0000-0000-000000000004"
+        let b = "track-00000000-0000-0000-0000-000000000005"
+        let search = app.textFields["library-search"]
+        XCTAssertTrue(search.waitForExistence(timeout: 15))
+        search.tap(); search.typeText("Swipe check\n")
+        let count = app.staticTexts["library-song-count"]
+        XCTAssertTrue(app.buttons[a].waitForExistence(timeout: 5))
+        XCTAssertEqual(count.label, "2曲 · 名前順")
+        func request(_ row: String) {
+            app.buttons[row].swipeLeft()
+            app.buttons["ライブラリから削除"].tap()
+            XCTAssertTrue(app.buttons["最近削除した曲へ移す"].waitForExistence(timeout: 5))
+        }
+        request(a)
+        // The swipe must not optimistically remove a row before confirmation.
+        XCTAssertTrue(app.buttons[a].exists)
+        XCTAssertTrue(app.buttons[b].exists)
+        capture(app, "25-swipe-before-confirmation")
+        app.buttons["キャンセル"].tap()
+        XCTAssertEqual(count.label, "2曲 · 名前順")
+        XCTAssertTrue(app.buttons[a].isHittable)
+        XCTAssertTrue(app.buttons[b].isHittable)
+        request(b)
+        XCTAssertTrue(app.staticTexts["「Swipe check B」をライブラリから削除しますか？"].exists)
+        app.buttons["最近削除した曲へ移す"].tap()
+        XCTAssertTrue(app.buttons[a].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons[b].exists)
+        XCTAssertEqual(count.label, "1曲 · 名前順")
+        capture(app, "26-swipe-after-deleting-second-row")
+        request(a)
+        app.buttons["キャンセル"].tap()
+        XCTAssertEqual(count.label, "1曲 · 名前順")
+        request(a)
+        app.buttons["最近削除した曲へ移す"].tap()
+        XCTAssertTrue(app.staticTexts["曲が見つかりません"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons[a].exists)
+        XCTAssertEqual(app.state, .runningForeground)
+        app.buttons["tab-設定"].tap()
+        let trash = app.buttons["settings-trash"]
+        for _ in 0..<4 { if trash.isHittable { break }; app.swipeUp() }
+        trash.tap()
+        for id in ["004", "005"] {
+            let restore = app.buttons["trash-restore-00000000-0000-0000-0000-000000000" + id]
+            XCTAssertTrue(restore.waitForExistence(timeout: 5))
+            restore.tap()
+        }
+        app.buttons["tab-ライブラリ"].tap()
+        XCTAssertTrue(app.buttons[a].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons[b].exists)
+        XCTAssertEqual(count.label, "2曲 · 名前順")
+        capture(app, "27-swipe-deleted-rows-restored")
+    }
+
     func testZBackupTrashRelinkAndPlaybackRecovery() throws {
         continueAfterFailure = false
         let app = XCUIApplication()

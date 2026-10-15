@@ -6,6 +6,10 @@ iPhone向けのローカル音楽プレイヤー。PCで歌詞の開始時刻を
 
 `WindowsEditor` に、インストール不要のWindows 10 / 11 x64用アプリを追加しました。ビルド・検証は [WindowsEditor/README.md](WindowsEditor/README.md) を参照してください。LRCと下書きの保存はWindowsの「名前を付けて保存」で行います。ブラウザー版で「全下書きを保存」したJSONを読み込んで移行できます。
 
+## 0.4.2版
+
+ライブラリのスワイプ削除で、確認前に画面だけ行を削除済みとする動作を止めました。確認画面は行の外で管理し、確定後に保存データと一覧を更新します。曲数の見出しも同じセクションのまま更新します。削除確認のキャンセル、別の行の削除、残った行への再スワイプ、連続削除と復元の回帰テストを追加しています。
+
 ## 0.4版
 
 - USB共有の保存場所を正規化し、実機で `/var` と `/private/var` の表記が違う場合にも同じファイルを参照します。存在しないファイルの親にあるリンクも確認します。
@@ -91,4 +95,3 @@ XcodeのUIテストで歌詞タップ、自動スクロール設定の保持、�
 AAC／ALACの実際の音楽、USB転送、実機のバックグラウンド・ロック画面操作はiPhoneでの確認も必要です。0.3の実機確認はユーザーの端末で行います。
 
 参考：[Appleのファイル共有設定](https://developer.apple.com/documentation/BundleResources/Information-Property-List/UIFileSharingEnabled)、[AVFoundationのメタデータ](https://developer.apple.com/documentation/avfoundation/avmetadataidentifier)、[Apple Musicの歌詞操作](https://support.apple.com/en-euro/guide/iphone/iphb9bf483aa/ios)、[Spotifyの再生画面](https://support.spotify.com/br-en/article/now-playing/)。
-
