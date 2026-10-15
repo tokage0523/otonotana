@@ -201,7 +201,7 @@ struct PlayerView: View {
                 }
                 Section("次に再生") {
                     ForEach(library.upcomingTracks) { track in
-                Button { library.select(track, context: library.queueTracks); showQueue = false } label: {
+                Button { library.playQueued(track); showQueue = false } label: {
                     HStack(spacing: 12) {
                         CoverView(image: library.artwork(for: track), cornerRadius: 8).frame(width: 44, height: 44)
                         VStack(alignment: .leading, spacing: 4) {

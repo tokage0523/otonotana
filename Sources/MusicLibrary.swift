@@ -744,6 +744,12 @@ final class MusicLibrary: NSObject, ObservableObject, AVAudioPlayerDelegate {
         objectWillChange.send(); savePlaybackState()
     }
 
+    func playQueued(_ track: Track) {
+        let old = playbackOrder
+        playbackOrder.jump(to: track.id)
+        if !loadTrack(track) { playbackOrder = old }
+    }
+
     func moveUpcoming(from offsets: IndexSet, to destination: Int) {
         var ids = playbackOrder.upcoming
         let moved = offsets.sorted().compactMap { ids.indices.contains($0) ? ids[$0] : nil }

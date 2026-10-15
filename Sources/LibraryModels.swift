@@ -102,9 +102,18 @@ struct PlaybackOrder: Codable {
     }
 
     var upcoming: [UUID] {
-        if !future.isEmpty { return Array(future.reversed()) + order.drop(while: { $0 != current }).dropFirst().filter { !future.contains($0) } }
-        guard let current, let index = order.firstIndex(of: current) else { return [] }
-        return Array(order.dropFirst(index + 1))
+        var result = Array(future.reversed())
+        let anchor = result.last(where: { order.contains($0) }) ?? current
+        if let anchor, let index = order.firstIndex(of: anchor) {
+            result += order.dropFirst(index + 1).filter { !result.contains($0) }
+        }
+        return result
+    }
+
+    mutating func jump(to id: UUID) {
+        guard order.contains(id), current != id else { return }
+        if let current { history.append(current) }
+        current = id; future = []
     }
 
     mutating func replaceUpcoming(_ ids: [UUID]) {
