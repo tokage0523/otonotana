@@ -8,3 +8,11 @@ build/
 Checks/output/
 Design/output/
 Checks/BrowserProfile/
+WindowsEditor/bin/
+WindowsEditor/obj/
+WindowsEditor/publish/
+WindowsEditor/.packages/
+WindowsEditor/.dotnet/
+WindowsEditor/TestRun*/
+WindowsEditor/app.ico
+

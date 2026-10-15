@@ -84,10 +84,13 @@ async function preview(index) {
   audio.currentTime = seconds; selected = index; highlight();
   try { await audio.play(); } catch { status('この音源をブラウザで再生できません。秒数は手入力できます。', true); }
 }
-function download(content, extension, type) {
+async function download(content, extension, type) {
+  const filename = ($('songName').value.trim() || 'lyrics').replace(/[<>:"/\\|?*]/g, '_') + extension;
+  if (globalThis.otonotanaDesktop) return await globalThis.otonotanaDesktop.save(content, filename);
   const blob = new Blob([content], { type }); const url = URL.createObjectURL(blob); const link = document.createElement('a');
-  link.href = url; link.download = ($('songName').value.trim() || 'lyrics').replace(/[<>:"/\\|?*]/g, '_') + extension;
+  link.href = url; link.download = filename;
   document.body.append(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 60000);
+  return true;
 }
 $('audioFile').onchange = event => {
   const file = event.target.files[0]; if (!file) return;
@@ -116,11 +119,14 @@ $('songName').oninput = () => {
   if (!committedNameEdit) { history.push(beforeNameEdit || snapshot()); committedNameEdit = true; }
   persist();
 };
-$('export').onclick = () => {
-  try { const content = LyricsCore.serialize(rows, audioURL ? audio.duration : undefined); download(content, '.lrc', 'text/plain;charset=utf-8'); status('LRCを保存しました。音楽ファイルと一緒にiPhoneへ渡してください。'); }
+$('export').onclick = async () => {
+  try { const content = LyricsCore.serialize(rows, audioURL ? audio.duration : undefined); const saved = await download(content, '.lrc', 'text/plain;charset=utf-8'); status(saved ? 'LRCを保存しました。音楽ファイルと一緒にiPhoneへ渡してください。' : '保存をキャンセルしました。'); }
   catch (error) { status(error.message, true); }
 };
-$('draft').onclick = () => { download(JSON.stringify({ version: 1, name: $('songName').value, rows }, null, 2), '.json', 'application/json'); status('編集用の下書きを保存しました。'); };
+$('draft').onclick = async () => {
+  try { const saved = await download(JSON.stringify({ version: 1, name: $('songName').value, rows }, null, 2), '.json', 'application/json'); status(saved ? '編集用の下書きを保存しました。' : '保存をキャンセルしました。'); }
+  catch (error) { status(error.message, true); }
+};
 function validateDraft(data) {
   return EditorState.validateDraft(data);
 }
@@ -164,7 +170,10 @@ $('deleteProject').onclick = () => {
   if (!projects.length) projects.push({ version: 1, id: newID(), name: '', rows: [] });
   loadProject(projects[0].id);
 };
-$('exportProjects').onclick = () => { persist(); download(JSON.stringify({ version: 2, activeID, drafts: projects }, null, 2), '.json', 'application/json'); status('全下書きを保存しました。'); };
+$('exportProjects').onclick = async () => {
+  try { persist(); const saved = await download(JSON.stringify({ version: 2, activeID, drafts: projects }, null, 2), '.json', 'application/json'); status(saved ? '全下書きを保存しました。' : '保存をキャンセルしました。'); }
+  catch (error) { status(error.message, true); }
+};
 function restoreState(state) { if (!state) return; rows = state.rows; selected = state.selected || 0; $('songName').value = state.name; expectedAudio = state.audioFilename || ''; persist(); render(); }
 $('undo').onclick = () => restoreState(history.undo(snapshot()));
 $('redo').onclick = () => restoreState(history.redo(snapshot()));
@@ -189,3 +198,4 @@ try {
 }
 catch { status('下書きを復元できません。保存した下書きファイルから読み込めます。', true); }
 render();
+

@@ -1,0 +1,39 @@
+name: Build Windows lyrics editor
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'WindowsEditor/**'
+      - 'PCEditor/**'
+      - '.github/workflows/build-windows-editor.yml'
+permissions:
+  contents: read
+jobs:
+  build:
+    # Keep automated builds on the free standard public-repository runner.
+    if: github.event.repository.private == false
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Check lyric data and editor state
+        run: |
+          node PCEditor/lyrics-core.test.cjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node PCEditor/editor-state.test.cjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Build portable Windows application
+        run: ./WindowsEditor/build.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OtonotanaEditor-Windows-x64
+          path: |
+            WindowsEditor/publish/OtonotanaEditor.exe
+            WindowsEditor/publish/使い方.txt
+            WindowsEditor/publish/Licenses/**
+          retention-days: 7
+
