@@ -240,6 +240,7 @@ private struct PlayerOptionsMenu: View, Equatable {
 struct TrackDetailsView: View {
     @EnvironmentObject private var library: MusicLibrary
     @Environment(\.dismiss) private var dismiss
+    @FocusState private var focusedField: String?
     let track: Track
     @State private var title = ""
     @State private var artist = ""
@@ -274,6 +275,7 @@ struct TrackDetailsView: View {
                 }
                 Section("メモ") {
                     TextField("自由に記入", text: $notes, axis: .vertical).lineLimit(3...6).accessibilityLabel("メモ")
+                        .focused($focusedField, equals: "メモ")
                 }
                 Section("ファイル") {
                     LabeledContent("ファイル名") { Text(track.filename).textSelection(.enabled).multilineTextAlignment(.trailing) }
@@ -285,6 +287,10 @@ struct TrackDetailsView: View {
                 }
             }.navigationTitle("曲の情報").scrollDismissesKeyboard(.interactively)
                 .toolbar {
+                    ToolbarItemGroup(placement: .keyboard) {
+                        Spacer()
+                        Button("完了") { focusedField = nil }.accessibilityIdentifier("information-keyboard-done")
+                    }
                     ToolbarItem(placement: .cancellationAction) { Button("キャンセル") { dismiss() } }
                     ToolbarItem(placement: .confirmationAction) {
                         Button("保存") {
@@ -311,7 +317,8 @@ struct TrackDetailsView: View {
         VStack(alignment: .leading, spacing: 5) {
             Text(name).font(.caption).foregroundStyle(.secondary)
             TextField(name, text: text).keyboardType(numeric ? .numberPad : .default)
-                .accessibilityLabel(name)
+                .accessibilityLabel(name).focused($focusedField, equals: name)
+                .submitLabel(.done).onSubmit { focusedField = nil }
         }.padding(.vertical, 3)
     }
 }

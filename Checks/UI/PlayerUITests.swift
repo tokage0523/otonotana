@@ -270,7 +270,9 @@ final class PlayerUITests: XCTestCase {
             let result = app.textFields[name]
             for _ in 0..<5 {
                 if result.isHittable { break }
-                app.swipeUp()
+                let above = result.exists && result.frame.midY < app.frame.height * 0.25
+                app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: above ? 0.4 : 0.7))
+                    .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: above ? 0.65 : 0.45)))
             }
             return result
         }
@@ -281,8 +283,11 @@ final class PlayerUITests: XCTestCase {
         capture(app, "17-labeled-track-information")
         // Leave the old title/artist intact and add information that was absent.
         let genre = field("ジャンル"); genre.tap(); genre.typeText("Test Genre")
+        app.buttons["information-keyboard-done"].tap()
         let year = field("発売年"); year.tap(); year.typeText("2026")
+        app.buttons["information-keyboard-done"].tap()
         let composer = field("作曲者"); composer.tap(); composer.typeText("Test Composer")
+        app.buttons["information-keyboard-done"].tap()
         app.buttons["保存"].tap()
         app.terminate(); app.launchArguments = ["--ui-test-fixture"]; app.launch()
         openDetails()
