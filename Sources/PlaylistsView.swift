@@ -66,7 +66,10 @@ struct TrackCollectionView: View {
                     }.buttonStyle(.bordered)
                 }
                 Section("\(tracks.count)曲") {
-                    ForEach(tracks) { TrackRow(track: $0, context: tracks, playlistID: playlist?.id, removeFavoriteOnly: isFavorites) }
+                    ForEach(tracks) {
+                        TrackRow(track: $0, context: tracks, playlistID: playlist?.id, removeFavoriteOnly: isFavorites,
+                                 accessibilityPrefix: playlist != nil ? "playlist-track" : isFavorites ? "favorite-track" : "recent-track")
+                    }
                 }
             }
         }.navigationTitle(title)

@@ -139,6 +139,7 @@ struct TrackRow: View {
     let context: [Track]
     var playlistID: UUID? = nil
     var removeFavoriteOnly = false
+    var accessibilityPrefix = "track"
     @State private var editing = false
     @State private var confirmDelete = false
     var body: some View {
@@ -157,7 +158,7 @@ struct TrackRow: View {
                 if track.isFavorite { Image(systemName: "heart.fill").font(.caption).foregroundStyle(.indigo) }
                 if library.current?.id == track.id { Image(systemName: "waveform").foregroundStyle(.indigo) }
             }.padding(.vertical, 8).contentShape(Rectangle())
-        }.buttonStyle(.plain).accessibilityIdentifier("track-\(track.id.uuidString)")
+        }.buttonStyle(.plain).accessibilityIdentifier("\(accessibilityPrefix)-\(track.id.uuidString)")
             .swipeActions(allowsFullSwipe: false) {
                 if let playlistID { Button("プレイリストから外す", role: .destructive) { library.removeFromPlaylist(track.id, playlistID: playlistID) } }
                 else if removeFavoriteOnly { Button("お気に入りから外す") { library.toggleFavorite(track) }.tint(.orange) }
