@@ -369,7 +369,7 @@ final class MusicLibrary: NSObject, ObservableObject, AVAudioPlayerDelegate {
                         if existing.fileStamp != stamp {
                             _ = try await AudioImportValidator.duration(at: url)
                             stage = "曲一覧の保存"
-                            var latest = tracks.first { $0.id == id }!
+                            guard var latest = tracks.first(where: { $0.id == id }) else { continue }
                             latest.fileStamp = stamp; try commitTrack(latest)
                         }
                     } else {
@@ -970,7 +970,12 @@ extension MusicLibrary {
             guard let value = UserDefaults.standard.object(forKey: key) else { return nil }
             return (key, String(describing: value))
         })
-        let manifest = BackupManifest(createdAt: Date(), tracks: tracks, playlists: playlists, albums: manualAlbums,
+        let records = tracks.map { original -> Track in
+            var track = original
+            if track.sharedPath == nil { track.sharedPath = "Music/" + track.filename }
+            return track
+        }
+        let manifest = BackupManifest(createdAt: Date(), tracks: records, playlists: playlists, albums: manualAlbums,
                                       audioFiles: [:], artworkFiles: [:], settings: settings)
         let audio = Dictionary(uniqueKeysWithValues: tracks.map { ($0.id, audioURL(for: $0)) })
         let artworkRoot = directory

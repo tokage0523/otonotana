@@ -22,7 +22,7 @@ struct LibraryCatalog: Codable {
 }
 
 struct PlaybackSnapshot: Codable {
-    let order: PlaybackOrder
+    var order: PlaybackOrder
     let position: Double
 }
 
