@@ -36,6 +36,10 @@ internal sealed class EditorWindow : Form
     private bool ready, saving;
     private readonly ToolStripStatusLabel status = new("起動しています…");
     private readonly MenuStrip menus = new();
+    private readonly NativeAudio nativeAudio = new();
+    private readonly System.Windows.Forms.Timer audioTimer = new() { Interval = 50 };
+    private string? selectedAudioPath;
+    private string? selectedAudioToken;
 
     internal EditorWindow(string dataRoot, bool selfTest)
     {
@@ -60,11 +64,13 @@ internal sealed class EditorWindow : Form
         help.DropDownItems.Add("ブラウザー版の下書きを引き継ぐ", null, (_, _) => MessageBox.Show(this,
             "① ブラウザー版で「全下書きを保存」を押します。\n② このアプリで「保存済みの歌詞を開く」を押します。\n③ ①で保存したJSONファイルを選びます。\n\n音楽ファイルはコピーしません。曲を切り替えたら対応する音楽を選んでください。", "下書きの引き継ぎ"));
         help.DropDownItems.Add("このアプリについて", null, (_, _) => MessageBox.Show(this,
-            "音の棚 · 歌詞エディター 0.4.1\n\n下書きはこのPCに自動保存します。\n大切な編集内容は「全下書きを保存」で別途保存できます。\n\nLRCを音楽と一緒にiPhoneへ転送して使います。", "音の棚"));
+            "音の棚 · 歌詞エディター 0.4.3\n\n下書きはこのPCに自動保存します。\n大切な編集内容は「全下書きを保存」で別途保存できます。\n\nLRCを音楽と一緒にiPhoneへ転送して使います。", "音の棚"));
         menus.Items.AddRange([file, help]); menus.Enabled = false;
         MainMenuStrip = menus;
         Controls.Add(browser); Controls.Add(footer); Controls.Add(menus);
         Shown += async (_, _) => await InitializeAsync();
+        audioTimer.Tick += (_, _) => { if (ready) SendAudioState(); };
+        FormClosed += (_, _) => { audioTimer.Stop(); audioTimer.Dispose(); nativeAudio.Dispose(); browser.Dispose(); };
         if (selfTest) { ShowInTaskbar = false; Opacity = 0; }
     }
 
@@ -87,7 +93,7 @@ internal sealed class EditorWindow : Form
     {
         try
         {
-            var assets = Path.Combine(dataRoot, "Assets", "0.4.1"); Directory.CreateDirectory(assets);
+            var assets = Path.Combine(dataRoot, "Assets", "0.4.3"); Directory.CreateDirectory(assets);
             foreach (var file in new[] { "index.html", "editor.js", "editor-state.js", "lyrics-core.js" })
                 File.WriteAllText(Path.Combine(assets, file), Resource("EditorAssets." + file), new UTF8Encoding(false));
             var environment = await CoreWebView2Environment.CreateAsync(userDataFolder: Path.Combine(dataRoot, "Profile"));
@@ -119,6 +125,7 @@ internal sealed class EditorWindow : Form
             core.NavigationCompleted += async (_, e) => {
                 if (!e.IsSuccess) { status.Text = "画面を読み込めませんでした。アプリを開き直してください。"; return; }
                 ready = true; menus.Enabled = true; status.Text = "PC内で編集 · 下書きは自動保存されます";
+                audioTimer.Start();
                 if (selfTest) await RunSelfTestAsync();
             };
             core.Navigate(Origin + "index.html");
@@ -139,8 +146,8 @@ internal sealed class EditorWindow : Form
         {
             using var doc = JsonDocument.Parse(json);
             var message = doc.RootElement;
-            if (message.GetProperty("kind").GetString() != "save") return;
             id = message.GetProperty("id").GetInt32();
+            if (message.GetProperty("kind").GetString() != "save") { await AudioCommandAsync(message, id); return; }
             if (saving) throw new InvalidOperationException("先に開いている保存画面を閉じてください。");
             var content = message.GetProperty("content").GetString() ?? "";
             if (content.Length > 16 * 1024 * 1024) throw new InvalidOperationException("保存する歌詞が大きすぎます。");
@@ -175,6 +182,46 @@ internal sealed class EditorWindow : Form
         finally { if (ownsSave) saving = false; }
     }
 
+    private void SendAudioState() => browser.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(new { kind = "audio-state", value = nativeAudio.State }));
+
+    private async Task AudioCommandAsync(JsonElement message, int id)
+    {
+        try
+        {
+            object? result = null;
+            switch (message.GetProperty("kind").GetString())
+            {
+                case "choose-audio":
+                    string? path;
+                    if (selfTest) path = Path.Combine(dataRoot, message.GetProperty("fixture").GetString() switch {
+                        "alac" => "alac.m4a", "aac" => "sample.m4a", _ => "sample.wav"
+                    });
+                    else
+                    {
+                        using var dialog = new OpenFileDialog { Title = "音楽を開く", Filter = "音楽ファイル|*.m4a;*.mp3;*.wav;*.flac;*.aac;*.wma;*.aiff;*.aif|すべてのファイル|*.*", CheckFileExists = true, Multiselect = false, RestoreDirectory = true };
+                        path = dialog.ShowDialog(this) == DialogResult.OK ? dialog.FileName : null;
+                    }
+                    if (path != null) { selectedAudioPath = path; selectedAudioToken = Guid.NewGuid().ToString("N"); result = new { filename = Path.GetFileName(path), token = selectedAudioToken }; }
+                    break;
+                case "load-audio":
+                    if (selectedAudioPath == null || message.GetProperty("token").GetString() != selectedAudioToken) throw new InvalidDataException("音楽ファイルを選び直してください。");
+                    await nativeAudio.OpenAsync(selectedAudioPath); result = nativeAudio.State; break;
+                case "play-audio": nativeAudio.Play(); result = nativeAudio.State; break;
+                case "pause-audio": nativeAudio.Pause(); result = nativeAudio.State; break;
+                case "seek-audio": nativeAudio.Seek(message.GetProperty("seconds").GetDouble()); result = nativeAudio.State; break;
+                case "volume-audio": nativeAudio.SetVolume(message.GetProperty("volume").GetDouble()); result = nativeAudio.State; break;
+                case "close-audio": nativeAudio.Dispose(); result = nativeAudio.State; break;
+                default: throw new InvalidDataException("この操作には対応していません。");
+            }
+            SendAudioState();
+            browser.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(new { kind = "audio-result", id, value = result }));
+        }
+        catch (Exception error)
+        {
+            browser.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(new { kind = "audio-result", id, error = "音楽を開く／再生する操作に失敗しました：" + error.Message }));
+        }
+    }
+
     internal static async Task SaveTextAsync(string destination, string content)
     {
         var folder = Path.GetDirectoryName(destination)!; Directory.CreateDirectory(folder);
@@ -195,4 +242,3 @@ internal sealed class EditorWindow : Form
         Close();
     }
 }
-

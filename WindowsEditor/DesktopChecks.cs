@@ -44,7 +44,7 @@ internal static class DesktopChecks
         if (File.Exists(Path.Combine(root, "phase1.ok")))
         {
             await Assert("document.getElementById('songName').value === '引き継ぎテスト' && document.querySelectorAll('#rows .row').length === 2", "draft restored after closing and reopening the application");
-            await Assert("document.getElementById('audio').paused && !document.getElementById('audio').hasAttribute('src')", "restart never plays audio automatically");
+            await Assert("audio.paused && !Number.isFinite(audio.duration)", "restart never plays audio automatically");
             File.WriteAllLines(Path.Combine(root, "phase2.ok"), log);
             return;
         }
@@ -71,14 +71,31 @@ internal static class DesktopChecks
         await Wait("document.getElementById('songName').value==='引き継ぎテスト'");
         await Assert("document.querySelectorAll('#projects option').length===2 && document.querySelectorAll('#rows .row').length===2", "browser multi-draft JSON imports without replacing existing drafts");
         var wav = Path.Combine(root, "sample.wav"); WriteWave(wav);
-        await SelectFile("#audioFile", wav);
-        await Wait("Number.isFinite(document.getElementById('audio').duration) && document.getElementById('audio').duration>4");
-        await Assert("(async()=>{let a=document.getElementById('audio');a.currentTime=1.5;await a.play();a.pause();document.getElementById('stamp').click();return Number(document.querySelector('#rows input[type=number]').value)>=1.5})()", "actual local audio decodes, plays and stamps a lyric");
+        await Assert("openDesktopAudio('wav')", "native file picker loads WAV through the Windows audio engine");
+        await Wait("Number.isFinite(audio.duration) && audio.duration>4");
+        await Assert("(async()=>{audio.currentTime=1.5;await audio.play();return !audio.paused})()", "native seek starts playback at the requested position");
+        await Wait("audio.currentTime>1.6");
+        await Evaluate("audio.pause(); document.getElementById('stamp').click(); true");
+        await Assert("Number(document.querySelector('#rows input[type=number]').value)>=1.5 && Number(document.querySelector('#rows input[type=number]').value)<3", "lyric stamping uses the native playback clock");
         if (File.Exists(Path.Combine(root, "sample.m4a")))
         {
-            await SelectFile("#audioFile", Path.Combine(root, "sample.m4a"));
-            await Wait("document.getElementById('audioName').textContent==='sample.m4a' && Number.isFinite(document.getElementById('audio').duration) && document.getElementById('audio').duration>4");
-            await Assert("(async()=>{let a=document.getElementById('audio');await a.play();a.pause();return !a.error})()", "M4A AAC playback in the real Windows host");
+            await Assert("openDesktopAudio('aac')", "native AAC M4A load");
+            await Assert("(async()=>{await audio.play();return !audio.error && !audio.paused})()", "M4A AAC playback in the real Windows host");
+            await Wait("audio.currentTime>0.1");
+            await Evaluate("audio.pause(); true");
+        }
+        if (File.Exists(Path.Combine(root, "alac.m4a")))
+        {
+            await Assert("openDesktopAudio('alac')", "ALAC M4A opens without transcoding");
+            await Assert("(async()=>{await audio.play();return !audio.error && !audio.paused})()", "ALAC M4A starts native playback");
+            await Wait("audio.currentTime>0.15");
+            await Evaluate("audio.pause(); audio.currentTime=2; true");
+            await Wait("audio.paused && audio.currentTime>=1.95 && audio.currentTime<2.2");
+            await Assert("(async()=>{await audio.play();return !audio.paused})()", "ALAC can resume after seeking while paused");
+            await Wait("audio.currentTime>2.2");
+            await Evaluate("audio.pause(); audio.volume=0.4; true");
+            await Wait("audio.paused && audio.volume===0.4");
+            await Assert("(async()=>{let a=await window.otonotanaDesktop.chooseAudio('alac');try{await window.otonotanaDesktop.loadAudio(a.token+'bad');return false}catch{return true}})()", "audio access requires the native picker token");
         }
         await Evaluate("document.getElementById('exportProjects').onclick()");
         using (var book = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "Saved", "引き継ぎテスト.json"))))
@@ -89,6 +106,8 @@ internal static class DesktopChecks
         await Assert("location.href === 'https://editor.otonotana.local/index.html'", "external page navigation blocked");
         await Evaluate("window.scrollTo(0,500)");
         using (var screenshot = File.Create(Path.Combine(root, "desktop-preview.png"))) await core.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, screenshot);
+        await Evaluate("closeAudio(); true");
+        await Wait("audio.paused && !Number.isFinite(audio.duration)");
         File.WriteAllLines(Path.Combine(root, "phase1.ok"), log);
     }
 
@@ -102,4 +121,3 @@ internal static class DesktopChecks
         for (var i = 0; i < count; i++) writer.Write((short)(Math.Sin(i * Math.PI * 2 * 440 / sampleRate) * 600));
     }
 }
-

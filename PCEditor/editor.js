@@ -1,6 +1,6 @@
 'use strict';
 const $ = id => document.getElementById(id);
-const audio = $('audio');
+const audio = globalThis.otonotanaDesktop?.audio || $('audio');
 let rows = [], selected = 0, audioURL = null;
 const storageKey = 'otonotana-projects-v2';
 const newID = () => globalThis.crypto?.randomUUID?.() || String(Date.now()) + Math.random().toString(16).slice(2);
@@ -82,7 +82,7 @@ async function preview(index) {
   const seconds = rows[index].seconds;
   if (seconds === null || seconds >= audio.duration) { status('この行に曲の長さより短い時刻を設定してください。', true); return; }
   audio.currentTime = seconds; selected = index; highlight();
-  try { await audio.play(); } catch { status('この音源をブラウザで再生できません。秒数は手入力できます。', true); }
+  try { await audio.play(); } catch (error) { status(globalThis.otonotanaDesktop ? error.message : 'この音源をブラウザで再生できません。秒数は手入力できます。', true); }
 }
 async function download(content, extension, type) {
   const filename = ($('songName').value.trim() || 'lyrics').replace(/[<>:"/\\|?*]/g, '_') + extension;
@@ -102,9 +102,26 @@ $('audioFile').onchange = event => {
   if (!$('songName').value) $('songName').value = file.name.replace(/\.[^.]+$/, '');
   persist(); status('音楽を開きました。');
 };
+let choosingDesktopAudio = false;
+async function openDesktopAudio(fixture) {
+  if (choosingDesktopAudio) return false;
+  choosingDesktopAudio = true;
+  try {
+    const chosen = await globalThis.otonotanaDesktop.chooseAudio(fixture);
+    if (!chosen) return false;
+    if (expectedAudio && expectedAudio !== chosen.filename && rows.length && !confirm('前に選んだ音楽と名前が違います。この下書きに使いますか？')) return false;
+    await globalThis.otonotanaDesktop.loadAudio(chosen.token);
+    if (audioURL) URL.revokeObjectURL(audioURL);
+    audioURL = 'native:' + chosen.token; expectedAudio = chosen.filename;
+    $('audioName').textContent = chosen.filename;
+    if (!$('songName').value) $('songName').value = chosen.filename.replace(/\.[^.]+$/, '');
+    persist(); status('音楽を開きました。'); return true;
+  } catch (error) { status(error.message, true); return false; }
+  finally { choosingDesktopAudio = false; }
+}
 audio.addEventListener('timeupdate', highlight);
-audio.addEventListener('error', () => status('この音源をブラウザで再生できません。秒数は手入力できます。', true));
-$('toggle').onclick = async () => { try { if (audio.paused) await audio.play(); else audio.pause(); } catch { status('音源を選び、再生できるか確認してください。', true); } };
+audio.addEventListener('error', () => status(audio.error?.message || 'この音源をブラウザで再生できません。秒数は手入力できます。', true));
+$('toggle').onclick = async () => { try { if (audio.paused) await audio.play(); else audio.pause(); } catch (error) { status(globalThis.otonotanaDesktop ? error.message : '音源を選び、再生できるか確認してください。', true); } };
 $('back').onclick = () => { audio.currentTime = Math.max(0, audio.currentTime - 3); };
 $('append').onclick = () => {
   if (!$('paste').value.trim()) { status('歌詞を貼り付けてください。', true); return; }
@@ -198,4 +215,3 @@ try {
 }
 catch { status('下書きを復元できません。保存した下書きファイルから読み込めます。', true); }
 render();
-

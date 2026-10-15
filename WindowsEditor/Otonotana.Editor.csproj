@@ -3,11 +3,12 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>
+    <UseWPF>true</UseWPF>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AssemblyName>OtonotanaEditor</AssemblyName>
     <RootNamespace>Otonotana.Editor</RootNamespace>
-    <Version>0.4.1</Version>
+    <Version>0.4.3</Version>
     <Product>音の棚 歌詞エディター</Product>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>app.ico</ApplicationIcon>
@@ -31,4 +32,3 @@
     </ItemGroup>
   </Target>
 </Project>
-
