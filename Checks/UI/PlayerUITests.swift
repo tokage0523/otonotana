@@ -64,8 +64,13 @@ final class PlayerUITests: XCTestCase {
         waitForExpectations(timeout: 60)
         capture(app, "28-lrc-export")
         save.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
-        expectation(for: NSPredicate(format: "isHittable == true"), evaluatedWith: app.buttons["lyrics-options"])
+        // SwiftUI Menu may report isHittable=false after a native dialog closes.
+        // Verify the export dialog is gone and the player is present instead.
+        expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: save)
         waitForExpectations(timeout: 60)
+        XCTAssertTrue(app.buttons["lyrics-options"].exists)
+        XCTAssertTrue(app.staticTexts["player-track-title"].exists)
+        XCTAssertFalse(app.alerts.firstMatch.exists)
     }
 
     func testModePaddingAndSeekBarTapAndDrag() throws {
