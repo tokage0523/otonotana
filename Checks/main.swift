@@ -35,6 +35,26 @@ let restored = try JSONDecoder().decode(Track.self, from: JSONEncoder().encode(e
 check(restored == edited && restored.isFavorite, "artwork metadata and lyrics round trip")
 print("Library compatibility and metadata checks passed.")
 
+let exportLines = [LyricLine(id: UUID(), seconds: 0.001, text: "日本語"),
+                   LyricLine(id: UUID(), seconds: 59.999, text: ""),
+                   LyricLine(id: UUID(), seconds: 120.123, text: "次の行")]
+let exported = Lyrics.export(exportLines, offset: 0.1)
+check(exported == "[00:00.101]日本語\n[01:00.099]\n[02:00.223]次の行\n", "export includes correction, millisecond precision and blank lines")
+let exportedLines = try Lyrics.parse(exported)
+check(exportedLines.count == 3 && abs(exportedLines[2].seconds - 120.223) < 0.00001, "LRC reimport does not apply correction twice")
+check(Lyrics.export(exportLines, offset: -0.1).hasPrefix("[00:00.000]"), "negative corrected times clamp to zero")
+check(Lyrics.export([LyricLine(id: UUID(), seconds: 59.9998, text: "line\nbreak")]) == "[01:00.000]line break\n", "export rounds across minute boundary and keeps one record per line")
+var removedLyrics = edited
+removedLyrics.lyricsOffset = 0.2
+removedLyrics.removeLyrics()
+let persistedRemoval = try JSONDecoder().decode(Track.self, from: JSONEncoder().encode(removedLyrics))
+check(!persistedRemoval.hasLyrics && persistedRemoval.lyricsOffset == nil && persistedRemoval.lyricsAutoImportDisabled == true,
+      "intentional removal survives catalog encoding and disables automatic sidecar reload")
+check(persistedRemoval.filename == edited.filename && persistedRemoval.artist == edited.artist && persistedRemoval.artworkFilename == edited.artworkFilename,
+      "removing lyrics preserves audio and metadata")
+check(oldTrack.lyricsAutoImportDisabled == nil && edited.hasLyrics, "old catalogs keep automatic lyrics import")
+print("LRC export and lyrics removal persistence checks passed.")
+
 check(oldTrack.sharedPath == nil && oldTrack.trackNumber == nil, "legacy audio keeps original storage and optional order")
 let a = UUID(), b = UUID(), c = UUID()
 var queue = PlaybackOrder()

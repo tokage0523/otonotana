@@ -13,6 +13,9 @@ struct LyricsView: View {
 
     @State private var activeID: UUID?
     @State private var showTiming = false
+    @State private var deletionTarget: Track?
+    @State private var exportURL: URL?
+    @State private var showExport = false
     private var fontSize: CGFloat { standardSize * (size == 0 ? 0.83 : size == 2 ? 1.21 : 1) }
 
     var body: some View {
@@ -37,7 +40,15 @@ struct LyricsView: View {
                 }.background(palette.text.opacity(0.07), in: Capsule())
                 Menu {
                     Button("歌詞のタイミングを調整", systemImage: "slider.horizontal.3") { showTiming = true }
-                    Button("LRCを読み込む", systemImage: "doc.badge.plus", action: importLyrics)
+                        .disabled(library.current?.hasLyrics != true)
+                    Button(library.current?.hasLyrics == true ? "LRCを読み込んで差し替え" : "LRCを読み込む",
+                           systemImage: "doc.badge.plus", action: importLyrics)
+                    if library.current?.hasLyrics == true {
+                        Button("LRCを書き出す", systemImage: "square.and.arrow.up") { exportLyrics() }
+                            .accessibilityIdentifier("lyrics-export")
+                        Button("歌詞を削除", systemImage: "trash", role: .destructive) { deletionTarget = library.current }
+                            .accessibilityIdentifier("lyrics-delete")
+                    }
                     if library.lyricLoop != nil { Button("範囲リピートを解除") { library.clearLyricLoop() } }
                 } label: { Image(systemName: "ellipsis").frame(width: 44, height: 44) }
                     .accessibilityLabel("歌詞の設定").accessibilityIdentifier("lyrics-options")
@@ -99,6 +110,39 @@ struct LyricsView: View {
             activeID = library.current?.lyrics?.last { (library.current?.lyricTime($0) ?? $0.seconds) <= clock.position }?.id
         }
         .sheet(isPresented: $showTiming) { LyricsTimingView().environmentObject(library) }
+        .confirmationDialog("「\(deletionTarget?.title ?? "")」の歌詞を削除しますか？",
+                            isPresented: Binding(get: { deletionTarget != nil }, set: { if !$0 { deletionTarget = nil } }),
+                            titleVisibility: .visible, presenting: deletionTarget) { track in
+            Button("歌詞を削除", role: .destructive) { library.removeLyrics(for: track.id); deletionTarget = nil }
+                .accessibilityIdentifier("lyrics-delete-confirm")
+            Button("キャンセル", role: .cancel) { deletionTarget = nil }
+        } message: { _ in
+            Text("曲と音楽ファイルは残ります。元のLRCファイルも削除しません。歌詞を戻すにはLRCを読み込み直してください。")
+        }
+        .sheet(isPresented: $showExport, onDismiss: cleanExport) {
+            if let exportURL { FolderExporter(url: exportURL) { showExport = false } }
+        }
+        .onDisappear { if !showExport { cleanExport() } }
+    }
+    private func exportLyrics() {
+        guard let track = library.current, let lines = track.lyrics, !lines.isEmpty else { return }
+        cleanExport()
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("Lyrics-\(UUID().uuidString)", isDirectory: true)
+        do {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            let name = String(track.title.components(separatedBy: CharacterSet(charactersIn: "/\\:?*\"<>|\n\r"))
+                .joined(separator: "_").prefix(80)).trimmingCharacters(in: .whitespacesAndNewlines)
+            let url = folder.appendingPathComponent(name.isEmpty ? "歌詞" : name).appendingPathExtension("lrc")
+            try Lyrics.export(lines, offset: track.lyricsOffset ?? 0).write(to: url, atomically: true, encoding: .utf8)
+            exportURL = url; showExport = true
+        } catch {
+            try? FileManager.default.removeItem(at: folder)
+            library.message = "歌詞を書き出せませんでした：\(error.localizedDescription)"
+        }
+    }
+    private func cleanExport() {
+        if let exportURL { try? FileManager.default.removeItem(at: exportURL.deletingLastPathComponent()) }
+        exportURL = nil
     }
     private func scroll(_ proxy: ScrollViewProxy, to id: UUID) {
         withAnimation(reduceMotion ? nil : .easeOut(duration: 0.26)) { proxy.scrollTo(id, anchor: .center) }

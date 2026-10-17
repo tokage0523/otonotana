@@ -427,10 +427,15 @@ final class MusicLibrary: NSObject, ObservableObject, AVAudioPlayerDelegate {
             return "\(url.lastPathComponent):\(values.fileSize ?? 0):\(values.contentModificationDate?.timeIntervalSince1970 ?? 0)"
         }
         let lrc = base.appendingPathExtension("lrc")
-        if let value = stamp(lrc), tracks.first(where: { $0.id == id })?.lyricsStamp != value {
+        if let latest = tracks.first(where: { $0.id == id }), latest.lyricsAutoImportDisabled != true,
+           let value = stamp(lrc), latest.lyricsStamp != value {
             do {
                 let lines = try await Task.detached { try Lyrics.parse(String(contentsOf: lrc, encoding: .utf8)) }.value
-                if var latest = tracks.first(where: { $0.id == id }) { latest.lyrics = lines; latest.lyricsStamp = value; try commitTrack(latest) }
+                if var latest = tracks.first(where: { $0.id == id }), latest.lyricsAutoImportDisabled != true {
+                    latest.lyrics = lines; latest.lyricsStamp = value; latest.lyricsOffset = nil
+                    try commitTrack(latest)
+                    if lyricLoop?.trackID == id { clearLyricLoop() }
+                }
             } catch { message = "\(lrc.lastPathComponent)：\(error.localizedDescription)" }
         }
         let images = [base.appendingPathExtension("jpg"), base.appendingPathExtension("png"),
@@ -622,10 +627,22 @@ final class MusicLibrary: NSObject, ObservableObject, AVAudioPlayerDelegate {
             guard let index = tracks.firstIndex(where: { $0.id == trackID }) else { return }
             var updated = tracks
             updated[index].lyrics = lines
+            updated[index].lyricsOffset = nil
+            updated[index].lyricsAutoImportDisabled = false
             try save(updated)
             tracks = updated
             if current?.id == trackID { current = updated[index] }
+            if lyricLoop?.trackID == trackID { clearLyricLoop() }
         } catch { message = "歌詞を読み込めませんでした：\(error.localizedDescription)" }
+    }
+
+    func removeLyrics(for trackID: UUID) {
+        guard var track = tracks.first(where: { $0.id == trackID }) else { return }
+        track.removeLyrics()
+        do {
+            try commitTrack(track)
+            if lyricLoop?.trackID == trackID { clearLyricLoop() }
+        } catch { message = "歌詞を削除できませんでした：\(error.localizedDescription)" }
     }
 
     func playLyric(_ line: LyricLine, trackID: UUID) {

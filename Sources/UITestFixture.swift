@@ -41,6 +41,14 @@ extension MusicLibrary {
                 if !FileManager.default.fileExists(atPath: target.path) { try FileManager.default.copyItem(at: audioURL(for: track), to: target) }
                 try "[00:00.000]共有ファイルの歌詞\n[00:12.000]次の行".write(to: target.deletingPathExtension().appendingPathExtension("lrc"), atomically: true, encoding: .utf8)
             }
+            if ProcessInfo.processInfo.arguments.contains("--lyrics-management-fixture"), let track = tracks.first(where: { $0.id == id }) {
+                let target = sharedDirectory.appendingPathComponent("Lyrics management.wav")
+                if !FileManager.default.fileExists(atPath: target.path) {
+                    try FileManager.default.copyItem(at: audioURL(for: track), to: target)
+                    try "[00:00.001]書き出しと削除の確認\n[00:12.345]次の行".write(
+                        to: target.deletingPathExtension().appendingPathExtension("lrc"), atomically: true, encoding: .utf8)
+                }
+            }
             if ProcessInfo.processInfo.arguments.contains("--m4a-test-fixture") {
                 let folder = sharedDirectory.appendingPathComponent("共有 テスト", isDirectory: true)
                 try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)

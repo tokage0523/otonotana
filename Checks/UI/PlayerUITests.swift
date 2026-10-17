@@ -1,6 +1,62 @@
 import XCTest
 
 final class PlayerUITests: XCTestCase {
+    func testLyricsExportDeletionCancelAndPersistence() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--ui-test-fixture", "--lyrics-management-fixture", "--reset-ui-preferences"]
+        app.launch()
+        let row = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Lyrics management,")).firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 20))
+        XCTAssertTrue(row.label.contains("歌詞あり"))
+        row.tap()
+        app.buttons["lyrics-toggle"].tap()
+        func menu() {
+            let options = app.buttons["lyrics-options"]
+            XCTAssertTrue(options.waitForExistence(timeout: 5))
+            options.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        }
+        menu()
+        app.buttons["lyrics-export"].tap()
+        let exportCancel = app.buttons.matching(NSPredicate(format: "label IN %@", ["キャンセル", "Cancel"])).firstMatch
+        XCTAssertTrue(exportCancel.waitForExistence(timeout: 10))
+        capture(app, "28-lrc-export")
+        exportCancel.tap()
+        menu()
+        app.buttons["lyrics-delete"].tap()
+        XCTAssertTrue(app.buttons["lyrics-delete-confirm"].waitForExistence(timeout: 5))
+        app.buttons["キャンセル"].tap()
+        XCTAssertTrue(app.buttons["lyric-0.001"].exists)
+        menu()
+        app.buttons["lyrics-delete"].tap()
+        app.buttons["lyrics-delete-confirm"].tap()
+        XCTAssertTrue(app.staticTexts["この曲に歌詞を添えよう"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.buttons["player-play-pause"].label, "再生")
+        capture(app, "29-lyrics-removed")
+        app.buttons["閉じる"].tap()
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        XCTAssertFalse(row.label.contains("歌詞あり"))
+        // The LRC remains alongside the audio; relaunch triggers a fresh shared scan.
+        app.terminate(); app.launch()
+        XCTAssertTrue(row.waitForExistence(timeout: 20))
+        row.tap()
+        app.buttons["lyrics-toggle"].tap()
+        XCTAssertTrue(app.staticTexts["この曲に歌詞を添えよう"].waitForExistence(timeout: 5))
+        app.buttons["player-play-pause"].tap()
+        XCTAssertEqual(app.buttons["player-play-pause"].label, "一時停止")
+        app.buttons["player-play-pause"].tap()
+        app.buttons["player-options"].tap()
+        app.buttons["曲の情報を編集"].tap()
+        let location = app.staticTexts["track-file-location"]
+        for _ in 0..<6 { if location.isHittable { break }; app.swipeUp() }
+        XCTAssertTrue(location.isHittable)
+        XCTAssertEqual(location.label, "音の棚 / Lyrics management.wav")
+        let size = app.descendants(matching: .any).matching(identifier: "track-file-size").firstMatch
+        XCTAssertTrue(size.exists)
+        XCTAssertFalse(size.label.contains("確認できません"))
+        capture(app, "30-file-and-storage-information")
+    }
+
     func testModePaddingAndSeekBarTapAndDrag() throws {
         continueAfterFailure = false
         let app = XCUIApplication()

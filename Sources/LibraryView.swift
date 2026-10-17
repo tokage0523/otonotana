@@ -158,6 +158,10 @@ struct TrackRow: View {
                         Label("ファイルが見つかりません", systemImage: "exclamationmark.triangle").font(.caption).foregroundStyle(.orange)
                     }
                 }.frame(maxWidth: .infinity, alignment: .leading)
+                if track.hasLyrics {
+                    Image(systemName: "quote.bubble").font(.caption).foregroundStyle(.secondary)
+                        .accessibilityLabel("歌詞あり").accessibilityIdentifier("lyrics-available-\(track.id)")
+                }
                 if track.isFavorite { Image(systemName: "heart.fill").font(.caption).foregroundStyle(.indigo) }
                 if library.current?.id == track.id { Image(systemName: "waveform").foregroundStyle(.indigo) }
             }.padding(.vertical, 8).contentShape(Rectangle())

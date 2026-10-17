@@ -292,14 +292,7 @@ struct TrackDetailsView: View {
                     TextField("自由に記入", text: $notes, axis: .vertical).lineLimit(3...6).accessibilityLabel("メモ")
                         .focused($focusedField, equals: "メモ")
                 }
-                Section("ファイル") {
-                    LabeledContent("ファイル名") { Text(track.filename).textSelection(.enabled).multilineTextAlignment(.trailing) }
-                    LabeledContent("ファイル形式", value: track.filename.split(separator: ".").last.map { String($0).uppercased() } ?? "不明")
-                    if let size = (try? library.audioURL(for: track).resourceValues(forKeys: [.fileSizeKey]))?.fileSize {
-                        LabeledContent("サイズ", value: ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file))
-                    }
-                    Text("編集内容は音の棚に保存されます。").font(.footnote).foregroundStyle(.secondary)
-                }
+                TrackFileInfoView(track: track)
             }.navigationTitle("曲の情報").scrollDismissesKeyboard(.interactively)
                 .toolbar {
                     ToolbarItemGroup(placement: .keyboard) {

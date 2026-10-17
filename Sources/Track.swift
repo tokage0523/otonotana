@@ -24,7 +24,15 @@ struct Track: Identifiable, Codable, Equatable {
     var addedAt: Date? = nil
     var metadataVersion: Int? = nil
     var lyricsOffset: Double? = nil
+    // Keep an intentional removal across automatic USB sidecar scans.
+    var lyricsAutoImportDisabled: Bool? = nil
 
     var isFavorite: Bool { favorite ?? false }
+    var hasLyrics: Bool { !(lyrics?.isEmpty ?? true) }
+    mutating func removeLyrics() {
+        lyrics = nil
+        lyricsOffset = nil
+        lyricsAutoImportDisabled = true
+    }
     func lyricTime(_ line: LyricLine) -> Double { max(0, line.seconds + (lyricsOffset ?? 0)) }
 }

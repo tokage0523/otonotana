@@ -7,6 +7,18 @@ struct LyricLine: Codable, Identifiable, Equatable {
 }
 
 enum Lyrics {
+    /// Bake the playback correction into millisecond timestamps for PC editors.
+    static func export(_ lines: [LyricLine], offset: Double = 0) -> String {
+        lines.map { line in
+            let seconds = max(0, line.seconds + offset)
+            let milliseconds = seconds.isFinite && seconds < Double(Int.max / 1000)
+                ? Int((seconds * 1000).rounded()) : 0
+            let text = line.text.components(separatedBy: .newlines).joined(separator: " ")
+            return String(format: "[%02d:%02d.%03d]%@", milliseconds / 60000,
+                          milliseconds / 1000 % 60, milliseconds % 1000, text)
+        }.joined(separator: "\n") + "\n"
+    }
+
     // UTF-8 LRC: [mm:ss.xx]text; repeated timestamps and millisecond offsets supported.
     static func parse(_ source: String) throws -> [LyricLine] {
         let pattern = try NSRegularExpression(pattern: #"\[(\d+):([0-5]\d)(?:\.(\d{1,3}))?\]"#)
