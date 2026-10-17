@@ -18,10 +18,12 @@ final class PlayerUITests: XCTestCase {
         }
         menu()
         app.buttons["lyrics-export"].tap()
-        let exportCancel = app.buttons.matching(NSPredicate(format: "label IN %@", ["キャンセル", "Cancel"])).firstMatch
+        let exportCancel = app.descendants(matching: .any).matching(NSPredicate(format: "label IN %@", ["キャンセル", "Cancel"])).firstMatch
         XCTAssertTrue(exportCancel.waitForExistence(timeout: 10))
         capture(app, "28-lrc-export")
-        exportCancel.tap()
+        // The system Files sheet exposes inconsistent Button/PopUpButton types.
+        // Tap its physical center without XCTest's scroll-to-visible action.
+        exportCancel.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         menu()
         app.buttons["lyrics-delete"].tap()
         XCTAssertTrue(app.buttons["lyrics-delete-confirm"].waitForExistence(timeout: 5))
@@ -29,7 +31,7 @@ final class PlayerUITests: XCTestCase {
         XCTAssertTrue(app.buttons["lyric-0.001"].exists)
         menu()
         app.buttons["lyrics-delete"].tap()
-        app.buttons["lyrics-delete-confirm"].tap()
+        app.buttons["lyrics-delete-confirm"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         XCTAssertTrue(app.staticTexts["この曲に歌詞を添えよう"].waitForExistence(timeout: 5))
         XCTAssertEqual(app.buttons["player-play-pause"].label, "再生")
         capture(app, "29-lyrics-removed")
@@ -396,8 +398,11 @@ final class PlayerUITests: XCTestCase {
         XCTAssertTrue(app.buttons[rowID].waitForExistence(timeout: 5))
         app.buttons[rowID].press(forDuration: 1)
         app.buttons["ライブラリから削除"].tap()
-        app.buttons["最近削除した曲へ移す"].tap()
-        XCTAssertFalse(app.buttons[rowID].exists)
+        let confirm = app.buttons["最近削除した曲へ移す"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        confirm.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: app.buttons[rowID])
+        waitForExpectations(timeout: 5)
         app.buttons["tab-設定"].tap()
         let trash = app.buttons["settings-trash"]
         for _ in 0..<4 { if trash.isHittable { break }; app.swipeUp() }
