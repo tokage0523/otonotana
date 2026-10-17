@@ -64,7 +64,12 @@ try {
   await page('Page.reload');
   await waitFor('document.getElementById("songName")?.value === "確認用の曲"');
   assert.equal(await evaluate('document.querySelectorAll("#rows .row").length'), 2);
-  const clickRow = (index, label) => evaluate(`[...document.querySelectorAll('#rows .row')[${index}].querySelectorAll('button')].find(b=>b.textContent===${JSON.stringify(label)}).click()`);
+  const clickRow = (index, label) => {
+    const match = label.match(/^([＋−])([\d.]+)秒$/);
+    return evaluate(match
+      ? `document.querySelectorAll('#rows .row')[${index}].querySelector('[data-adjust="${match[1] === '−' ? '-' : ''}${match[2]}"]').click()`
+      : `[...document.querySelectorAll('#rows .row')[${index}].querySelectorAll('button')].find(b=>b.textContent===${JSON.stringify(label)}).click()`);
+  };
   for (const [label, expected] of [['＋0.1秒','0.1'],['＋0.01秒','0.11'],['＋0.001秒','0.111'],['−0.1秒','0.011'],['−0.01秒','0.001'],['−0.001秒','0']]) {
     await clickRow(0, label);
     assert.equal(await evaluate('document.querySelector("#rows input").value'), expected);
@@ -123,9 +128,25 @@ try {
   await waitFor('document.getElementById("songName")?.value === "確認用の曲"');
   assert.equal(await evaluate('document.getElementById("projects").options.length'), 2);
   assert.equal(await evaluate('document.querySelector("#rows input").value'), '0.5');
+  for (const width of [1180, 980, 820, 700]) {
+    await page('Emulation.setDeviceMetricsOverride', { width, height: 1000, deviceScaleFactor: 1, mobile: false });
+    const layout = await evaluate(`(()=>{
+      const row=document.querySelector('#rows .row');
+      const groups=[...row.querySelectorAll('.timing-step')].map(e=>e.getBoundingClientRect());
+      const playback=row.querySelector('.row-playback').getBoundingClientRect();
+      const selection=row.querySelector('.row-selection button:last-child').getBoundingClientRect();
+      const remove=row.querySelector('.delete-row').getBoundingClientRect();
+      return { overflow:document.documentElement.scrollWidth-innerWidth, aligned:groups.every(g=>Math.abs(g.top-groups[0].top)<1),
+        sized:groups.every(g=>Math.abs(g.width-groups[0].width)<1), separated:selection.right<playback.left && playback.right<remove.left };
+    })()`);
+    assert.ok(layout.overflow <= 1, 'Page overflows at ' + width);
+    assert.ok(layout.aligned && layout.sized && layout.separated, 'Row controls overlap or lose alignment at ' + width);
+  }
+  await page('Emulation.setDeviceMetricsOverride', { width: 1180, height: 1000, deviceScaleFactor: 1, mobile: false });
+  await evaluate('window.scrollTo(0,0)');
   const image = await page('Page.captureScreenshot', { format: 'png' });
   await writeFile(resolve(output, 'pc-editor.png'), Buffer.from(image.data, 'base64'));
-  console.log('Browser checks passed: millisecond buttons, insert-after-selection and undo/redo, row playback stop without reset, draft migration, stamping and persistence.');
+  console.log('Browser checks passed: control alignment at 4 widths, millisecond adjustment, insertion/undo, playback stop, migration, stamping and persistence.');
   await call('Browser.close');
 } finally {
   socket?.close(); chrome.kill();

@@ -8,7 +8,7 @@
     <Nullable>enable</Nullable>
     <AssemblyName>OtonotanaEditor</AssemblyName>
     <RootNamespace>Otonotana.Editor</RootNamespace>
-    <Version>0.4.4</Version>
+    <Version>0.4.5</Version>
     <Product>音の棚 歌詞エディター</Product>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>app.ico</ApplicationIcon>

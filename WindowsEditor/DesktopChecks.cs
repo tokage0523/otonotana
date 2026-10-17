@@ -49,13 +49,13 @@ internal static class DesktopChecks
             return;
         }
         await Evaluate("document.getElementById('songName').value='保存テスト'; document.getElementById('paste').value='最初の一節\\n次の一節'; document.getElementById('append').click(); document.querySelectorAll('#rows input[type=number]').forEach((e,i)=>{e.value=String(1.25+i);e.dispatchEvent(new Event('change'))}); true");
-        await Evaluate("[...document.querySelector('#rows .row').querySelectorAll('button')].find(b=>b.textContent==='＋0.001秒').click()");
+        await Evaluate("document.querySelector('#rows .row [data-adjust=\"0.001\"]').click()");
         await Evaluate("document.getElementById('export').onclick()");
         var saved = Path.Combine(root, "Saved", "保存テスト.lrc");
         if (!File.ReadAllText(saved).Contains("[00:01.251]最初の一節")) throw new Exception("Native LRC save lost the 0.001 second button adjustment: " + File.ReadAllText(saved));
         if (File.ReadAllBytes(saved).Take(3).SequenceEqual(new byte[] { 239, 187, 191 })) throw new Exception("Unexpected UTF-8 BOM");
         log.Add("PASS native save writes Japanese LRC as UTF-8 without BOM");
-        await Evaluate("[...document.querySelector('#rows .row').querySelectorAll('button')].find(b=>b.textContent==='−0.001秒').click()");
+        await Evaluate("document.querySelector('#rows .row [data-adjust=\"-0.001\"]').click()");
         await Evaluate("document.getElementById('draft').onclick()");
         using (var draft = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "Saved", "保存テスト.json"))))
             if (draft.RootElement.GetProperty("rows").GetArrayLength() != 2) throw new Exception("Native draft export lost rows");
@@ -116,7 +116,7 @@ internal static class DesktopChecks
         core.Navigate("https://example.com/");
         await Task.Delay(100);
         await Assert("location.href === 'https://editor.otonotana.local/index.html'", "external page navigation blocked");
-        await Evaluate("window.scrollTo(0,500)");
+        await Evaluate("window.scrollTo(0,0)");
         using (var screenshot = File.Create(Path.Combine(root, "desktop-preview.png"))) await core.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, screenshot);
         await Evaluate("closeAudio(); true");
         await Wait("audio.paused && !Number.isFinite(audio.duration)");

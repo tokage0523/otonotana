@@ -67,6 +67,7 @@
       seek.disabled = !state.duration; seek.max = state.duration || 0;
       if (!scrubbing) { seek.value = state.position; time.textContent = state.duration ? `${format(state.position)} / ${format(state.duration)}` : '音楽を選んでください'; }
       document.getElementById('toggle').textContent = state.paused ? '再生' : '一時停止';
+      document.getElementById('native-volume').value = state.volume;
     });
     document.getElementById('audioFile').closest('label').addEventListener('click', event => {
       event.preventDefault(); window.openDesktopAudio();
@@ -77,6 +78,6 @@
     }
     const note = document.createElement('p'); note.className = 'hint'; note.id = 'desktop-migration';
     note.textContent = 'ブラウザー版の下書きは、そちらで「全下書きを保存」して、このアプリの「保存済みの歌詞を開く」から読み込めます。';
-    document.getElementById('projects').closest('section').append(note);
+    document.getElementById('projectHelp').append(note);
   });
 })();

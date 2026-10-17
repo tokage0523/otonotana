@@ -32,6 +32,7 @@ function highlight() {
   const active = activeIndex();
   [...$('rows').children].forEach((el, i) => { el.classList.toggle('selected', i === selected); el.classList.toggle('active', i === active && Boolean(audioURL)); });
   $('clock').textContent = LyricsCore.timestamp(audio.currentTime || 0);
+  $('toggle').textContent = audio.paused ? '再生' : '一時停止';
 }
 function action(label, handler) { const b = document.createElement('button'); b.textContent = label; b.type = 'button'; b.onclick = handler; return b; }
 function render() {
@@ -55,19 +56,27 @@ function render() {
       if (!committedTextEdit) { history.push(beforeTextEdit || snapshot()); committedTextEdit = true; }
       row.text = text.value; persist();
     };
-    const buttons = document.createElement('div'); buttons.className = 'actions';
-    buttons.append(action('選択', () => { selected = index; highlight(); }),
-      action('今の時刻', () => { selected = index; stamp(false); }));
+    const adjustments = document.createElement('div'); adjustments.className = 'timing-controls';
     for (const step of [0.1, 0.01, 0.001]) {
       const pair = document.createElement('span'); pair.className = 'timing-step';
-      pair.append(action(`−${step}秒`, () => adjust(index, -step)), action(`＋${step}秒`, () => adjust(index, step)));
-      buttons.append(pair);
+      const earlier = action('−', () => adjust(index, -step)), later = action('＋', () => adjust(index, step));
+      earlier.dataset.adjust = `-${step}`; later.dataset.adjust = String(step);
+      earlier.setAttribute('aria-label', `${index + 1}行目を${step}秒早める`); later.setAttribute('aria-label', `${index + 1}行目を${step}秒遅らせる`);
+      earlier.title = `${step}秒早める`; later.title = `${step}秒遅らせる`;
+      const unit = document.createElement('span'); unit.className = 'unit'; unit.textContent = `${step}秒`;
+      pair.append(earlier, unit, later); adjustments.append(pair);
     }
-    buttons.append(
-      action('ここから再生', () => preview(index)),
-      action('停止', () => { audio.pause(); highlight(); }),
-      action('削除', () => { if (!row.text || confirm('この歌詞の行を削除しますか？')) { checkpoint(); rows.splice(index, 1); selected = Math.min(selected, Math.max(0, rows.length - 1)); persist(); render(); } }));
-    el.append(number, seconds, text, buttons); area.append(el);
+    const buttons = document.createElement('div'); buttons.className = 'actions';
+    const selection = document.createElement('div'); selection.className = 'row-selection';
+    const choose = action('選択', () => { selected = index; highlight(); }); choose.className = 'select-row';
+    selection.append(choose, action('今の時刻', () => { selected = index; stamp(false); }));
+    const playback = document.createElement('div'); playback.className = 'row-playback';
+    const play = action('ここから再生', () => preview(index)); play.className = 'preview-row';
+    const stop = action('停止', () => { audio.pause(); highlight(); }); stop.className = 'stop-row';
+    playback.append(play, stop);
+    const remove = action('削除', () => { if (!row.text || confirm('この歌詞の行を削除しますか？')) { checkpoint(); rows.splice(index, 1); selected = Math.min(selected, Math.max(0, rows.length - 1)); persist(); render(); } });
+    remove.className = 'delete-row'; buttons.append(selection, playback, remove);
+    el.append(number, seconds, text, adjustments, buttons); area.append(el);
   }); highlight(); historyControls();
 }
 function adjust(index, delta) {
