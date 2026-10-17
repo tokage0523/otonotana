@@ -41,7 +41,7 @@ final class PlayerUITests: XCTestCase {
         app.buttons["player-play-pause"].tap()
         XCTAssertEqual(app.buttons["player-play-pause"].label, "一時停止")
         app.buttons["player-play-pause"].tap()
-        app.buttons["player-options"].tap()
+        app.buttons["player-options"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         app.buttons["曲の情報を編集"].tap()
         let location = app.staticTexts["track-file-location"]
         for _ in 0..<6 { if location.isHittable { break }; app.swipeUp() }
