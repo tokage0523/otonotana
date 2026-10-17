@@ -58,7 +58,7 @@ final class PlayerUITests: XCTestCase {
         app.buttons["lyrics-toggle"].tap()
         menu()
         app.buttons["lyrics-export"].tap()
-        let save = app.buttons.matching(NSPredicate(format: "label IN %@", ["Save", "保存"])).firstMatch
+        let save = app.buttons.matching(NSPredicate(format: "label IN %@", ["Save", "保存", "Move", "移動"])).firstMatch
         XCTAssertTrue(save.waitForExistence(timeout: 15))
         expectation(for: NSPredicate(format: "isEnabled == true"), evaluatedWith: save)
         waitForExpectations(timeout: 60)
