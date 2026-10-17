@@ -120,7 +120,7 @@ struct LyricsView: View {
             Text("曲と音楽ファイルは残ります。元のLRCファイルも削除しません。歌詞を戻すにはLRCを読み込み直してください。")
         }
         .sheet(isPresented: $showExport, onDismiss: cleanExport) {
-            if let exportURL { FolderExporter(url: exportURL) { showExport = false } }
+            if let exportURL { FolderExporter(url: exportURL, initialDirectory: library.sharedDirectory) { showExport = false } }
         }
         .onDisappear { if !showExport { cleanExport() } }
     }

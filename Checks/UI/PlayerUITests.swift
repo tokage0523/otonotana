@@ -10,20 +10,13 @@ final class PlayerUITests: XCTestCase {
         XCTAssertTrue(row.waitForExistence(timeout: 20))
         XCTAssertTrue(row.label.contains("歌詞あり"))
         row.tap()
+        if app.buttons["player-play-pause"].label == "一時停止" { app.buttons["player-play-pause"].tap() }
         app.buttons["lyrics-toggle"].tap()
         func menu() {
             let options = app.buttons["lyrics-options"]
             XCTAssertTrue(options.waitForExistence(timeout: 5))
             options.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         }
-        menu()
-        app.buttons["lyrics-export"].tap()
-        let exportCancel = app.descendants(matching: .any).matching(NSPredicate(format: "label IN %@", ["キャンセル", "Cancel"])).firstMatch
-        XCTAssertTrue(exportCancel.waitForExistence(timeout: 10))
-        capture(app, "28-lrc-export")
-        // The system Files sheet exposes inconsistent Button/PopUpButton types.
-        // Tap its physical center without XCTest's scroll-to-visible action.
-        exportCancel.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         menu()
         app.buttons["lyrics-delete"].tap()
         XCTAssertTrue(app.buttons["lyrics-delete-confirm"].waitForExistence(timeout: 5))
@@ -42,6 +35,7 @@ final class PlayerUITests: XCTestCase {
         app.terminate(); app.launch()
         XCTAssertTrue(row.waitForExistence(timeout: 20))
         row.tap()
+        if app.buttons["player-play-pause"].label == "一時停止" { app.buttons["player-play-pause"].tap() }
         app.buttons["lyrics-toggle"].tap()
         XCTAssertTrue(app.staticTexts["この曲に歌詞を添えよう"].waitForExistence(timeout: 5))
         app.buttons["player-play-pause"].tap()
@@ -57,6 +51,19 @@ final class PlayerUITests: XCTestCase {
         XCTAssertTrue(size.exists)
         XCTAssertFalse(size.label.contains("確認できません"))
         capture(app, "30-file-and-storage-information")
+        app.buttons["キャンセル"].tap()
+        app.buttons["閉じる"].tap()
+        app.buttons["track-00000000-0000-0000-0000-000000000002"].tap()
+        if app.buttons["player-play-pause"].label == "一時停止" { app.buttons["player-play-pause"].tap() }
+        app.buttons["lyrics-toggle"].tap()
+        menu()
+        app.buttons["lyrics-export"].tap()
+        let save = app.buttons.matching(NSPredicate(format: "label IN %@", ["Save", "保存"])).firstMatch
+        XCTAssertTrue(save.waitForExistence(timeout: 15))
+        capture(app, "28-lrc-export")
+        save.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        expectation(for: NSPredicate(format: "isHittable == true"), evaluatedWith: app.buttons["lyrics-options"])
+        waitForExpectations(timeout: 10)
     }
 
     func testModePaddingAndSeekBarTapAndDrag() throws {

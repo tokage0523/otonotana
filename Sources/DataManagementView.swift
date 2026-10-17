@@ -65,10 +65,12 @@ struct BackupView: View {
 
 struct FolderExporter: UIViewControllerRepresentable {
     let url: URL
+    var initialDirectory: URL? = nil
     let completion: () -> Void
     func makeCoordinator() -> Coordinator { Coordinator(completion: completion) }
     func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
         let picker = UIDocumentPickerViewController(forExporting: [url], asCopy: true)
+        picker.directoryURL = initialDirectory
         picker.delegate = context.coordinator
         return picker
     }
