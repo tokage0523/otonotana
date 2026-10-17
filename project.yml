@@ -23,6 +23,13 @@ targets:
         CFBundleShortVersionString: '0.4.6'
         CFBundleVersion: '10'
         UIFileSharingEnabled: true
+        UTExportedTypeDeclarations:
+          - UTTypeIdentifier: com.example.M4APlayer.lrc
+            UTTypeDescription: 時刻付き歌詞
+            UTTypeConformsTo: [public.plain-text]
+            UTTypeTagSpecification:
+              public.filename-extension: [lrc]
+              public.mime-type: text/plain
         LSSupportsOpeningDocumentsInPlace: true
         UILaunchScreen: {}
         UIBackgroundModes: [audio]

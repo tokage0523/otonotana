@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct LyricsView: View {
     @EnvironmentObject private var library: MusicLibrary
@@ -14,7 +15,8 @@ struct LyricsView: View {
     @State private var activeID: UUID?
     @State private var showTiming = false
     @State private var deletionTarget: Track?
-    @State private var exportURL: URL?
+    @State private var exportDocument = LyricsDocument(text: "")
+    @State private var exportName = "歌詞"
     @State private var showExport = false
     private var fontSize: CGFloat { standardSize * (size == 0 ? 0.83 : size == 2 ? 1.21 : 1) }
 
@@ -119,30 +121,20 @@ struct LyricsView: View {
         } message: { _ in
             Text("曲と音楽ファイルは残ります。元のLRCファイルも削除しません。歌詞を戻すにはLRCを読み込み直してください。")
         }
-        .sheet(isPresented: $showExport, onDismiss: cleanExport) {
-            if let exportURL { FolderExporter(url: exportURL, initialDirectory: library.sharedDirectory) { showExport = false } }
+        .fileExporter(isPresented: $showExport, document: exportDocument, contentType: .timedLyrics,
+                      defaultFilename: exportName) { result in
+            if case .failure(let error) = result, (error as NSError).code != NSUserCancelledError {
+                library.message = "歌詞を書き出せませんでした：\(error.localizedDescription)"
+            }
         }
-        .onDisappear { if !showExport { cleanExport() } }
     }
     private func exportLyrics() {
         guard let track = library.current, let lines = track.lyrics, !lines.isEmpty else { return }
-        cleanExport()
-        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("Lyrics-\(UUID().uuidString)", isDirectory: true)
-        do {
-            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-            let name = String(track.title.components(separatedBy: CharacterSet(charactersIn: "/\\:?*\"<>|\n\r"))
-                .joined(separator: "_").prefix(80)).trimmingCharacters(in: .whitespacesAndNewlines)
-            let url = folder.appendingPathComponent(name.isEmpty ? "歌詞" : name).appendingPathExtension("lrc")
-            try Lyrics.export(lines, offset: track.lyricsOffset ?? 0).write(to: url, atomically: true, encoding: .utf8)
-            exportURL = url; showExport = true
-        } catch {
-            try? FileManager.default.removeItem(at: folder)
-            library.message = "歌詞を書き出せませんでした：\(error.localizedDescription)"
-        }
-    }
-    private func cleanExport() {
-        if let exportURL { try? FileManager.default.removeItem(at: exportURL.deletingLastPathComponent()) }
-        exportURL = nil
+        let name = String(track.title.components(separatedBy: CharacterSet(charactersIn: "/\\:?*\"<>|").union(.controlCharacters))
+            .joined(separator: "_").prefix(60)).trimmingCharacters(in: .whitespacesAndNewlines.union(CharacterSet(charactersIn: ".")))
+        exportName = name.isEmpty ? "歌詞" : name
+        exportDocument = LyricsDocument(text: Lyrics.export(lines, offset: track.lyricsOffset ?? 0))
+        showExport = true
     }
     private func scroll(_ proxy: ScrollViewProxy, to id: UUID) {
         withAnimation(reduceMotion ? nil : .easeOut(duration: 0.26)) { proxy.scrollTo(id, anchor: .center) }

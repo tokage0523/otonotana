@@ -60,10 +60,12 @@ final class PlayerUITests: XCTestCase {
         app.buttons["lyrics-export"].tap()
         let save = app.buttons.matching(NSPredicate(format: "label IN %@", ["Save", "保存"])).firstMatch
         XCTAssertTrue(save.waitForExistence(timeout: 15))
+        expectation(for: NSPredicate(format: "isEnabled == true"), evaluatedWith: save)
+        waitForExpectations(timeout: 60)
         capture(app, "28-lrc-export")
         save.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         expectation(for: NSPredicate(format: "isHittable == true"), evaluatedWith: app.buttons["lyrics-options"])
-        waitForExpectations(timeout: 10)
+        waitForExpectations(timeout: 60)
     }
 
     func testModePaddingAndSeekBarTapAndDrag() throws {

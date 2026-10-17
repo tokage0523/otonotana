@@ -47,14 +47,17 @@ jobs:
           name: M4APlayer-unsigned
           path: M4APlayer-unsigned.ipa
           retention-days: 3
-      - name: Verify player screens on iPhone simulator
+      - name: Verify lyrics management on iPhone simulator
         run: |
           xcrun simctl list devices available -j > "$RUNNER_TEMP/devices.json"
           device_id=$(python3 -c 'import json,os; d=json.load(open(os.environ["RUNNER_TEMP"]+"/devices.json")); phones=[v for k,vs in d["devices"].items() if "iOS" in k for v in vs if v["name"].startswith("iPhone")]; preferred=[v for v in phones if v["name"] in ["iPhone 15 Pro","iPhone 16 Pro","iPhone 17 Pro"]]; print((preferred or phones)[0]["udid"])')
+          echo "PLAYER_SIMULATOR_ID=$device_id" >> "$GITHUB_ENV"
           xcodebuild test -project M4APlayer.xcodeproj -scheme M4APlayer -configuration Debug -destination "id=$device_id" -derivedDataPath build -resultBundlePath build/LyricsManagement.xcresult -only-testing:M4APlayerUITests/PlayerUITests/testLyricsExportDeletionCancelAndPersistence CODE_SIGNING_ALLOWED=NO
+      - name: Verify player screens on iPhone simulator
+        run: |
           # Give the existing suite its own clean catalogue and fixture state.
-          xcrun simctl uninstall "$device_id" com.example.M4APlayer
-          xcodebuild test -project M4APlayer.xcodeproj -scheme M4APlayer -configuration Debug -destination "id=$device_id" -derivedDataPath build -resultBundlePath build/PlayerUI.xcresult -skip-testing:M4APlayerUITests/PlayerUITests/testLyricsExportDeletionCancelAndPersistence CODE_SIGNING_ALLOWED=NO
+          xcrun simctl uninstall "$PLAYER_SIMULATOR_ID" com.example.M4APlayer
+          xcodebuild test -project M4APlayer.xcodeproj -scheme M4APlayer -configuration Debug -destination "id=$PLAYER_SIMULATOR_ID" -derivedDataPath build -resultBundlePath build/PlayerUI.xcresult -skip-testing:M4APlayerUITests/PlayerUITests/testLyricsExportDeletionCancelAndPersistence CODE_SIGNING_ALLOWED=NO
       - name: Export screen previews
         if: always()
         run: |
