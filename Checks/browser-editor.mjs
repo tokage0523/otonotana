@@ -48,7 +48,7 @@ try {
   await page('Page.enable');
   await page('Emulation.setDeviceMetricsOverride', { width: 1180, height: 1000, deviceScaleFactor: 1, mobile: false });
   async function evaluate(expression) {
-    const result = await page('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true });
+    const result = await page('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true, userGesture: true });
     if (result.exceptionDetails) throw new Error(JSON.stringify(result.exceptionDetails));
     return result.result.value;
   }
@@ -64,13 +64,34 @@ try {
   await page('Page.reload');
   await waitFor('document.getElementById("songName")?.value === "確認用の曲"');
   assert.equal(await evaluate('document.querySelectorAll("#rows .row").length'), 2);
+  const clickRow = (index, label) => evaluate(`[...document.querySelectorAll('#rows .row')[${index}].querySelectorAll('button')].find(b=>b.textContent===${JSON.stringify(label)}).click()`);
+  for (const [label, expected] of [['＋0.1秒','0.1'],['＋0.01秒','0.11'],['＋0.001秒','0.111'],['−0.1秒','0.011'],['−0.01秒','0.001'],['−0.001秒','0']]) {
+    await clickRow(0, label);
+    assert.equal(await evaluate('document.querySelector("#rows input").value'), expected);
+  }
+  await clickRow(0, '−0.001秒');
+  assert.equal(await evaluate('document.querySelector("#rows input").value'), '0');
+  await clickRow(0, '選択');
+  await evaluate("document.getElementById('blank').click()");
+  assert.deepEqual(await evaluate("rows.map(r=>r.text)"), ['最初の歌詞', '', '次の歌詞']);
+  assert.equal(await evaluate("selected"), 1);
+  assert.equal(await evaluate("document.activeElement.getAttribute('aria-label')"), '2行目の歌詞');
+  await evaluate("document.getElementById('undo').click()");
+  assert.deepEqual(await evaluate("rows.map(r=>r.text)"), ['最初の歌詞', '次の歌詞']);
+  await evaluate("document.getElementById('redo').click()");
+  assert.deepEqual(await evaluate("rows.map(r=>r.text)"), ['最初の歌詞', '', '次の歌詞']);
+  await evaluate("document.getElementById('undo').click()");
   await evaluate(`document.getElementById('shiftSeconds').value='0.5';document.getElementById('shift').click();`);
   assert.equal(await evaluate('document.querySelector("#rows input").value'), '0.5');
   await evaluate(`document.getElementById('undo').click()`);
   assert.equal(await evaluate('document.querySelector("#rows input").value'), '0');
   await evaluate(`document.getElementById('redo').click()`);
   assert.equal(await evaluate('document.querySelector("#rows input").value'), '0.5');
-  await evaluate(`document.getElementById('newProject').click();document.getElementById('songName').value='二曲目';document.getElementById('songName').dispatchEvent(new Event('input'));document.getElementById('paste').value='別の歌詞';document.getElementById('append').click();`);
+  await evaluate("document.getElementById('newProject').click();document.getElementById('blank').click()");
+  assert.equal(await evaluate('document.querySelectorAll("#rows .row").length'), 1);
+  await evaluate("document.getElementById('undo').click()");
+  assert.equal(await evaluate('document.querySelectorAll("#rows .row").length'), 0);
+  await evaluate(`document.getElementById('songName').value='二曲目';document.getElementById('songName').dispatchEvent(new Event('input'));document.getElementById('paste').value='別の歌詞';document.getElementById('append').click();`);
   assert.equal(await evaluate('document.getElementById("projects").options.length'), 2);
   await evaluate(`const selector=document.getElementById('projects');selector.value=selector.options[0].value;selector.dispatchEvent(new Event('change'));`);
   assert.equal(await evaluate('document.getElementById("songName").value'), '確認用の曲');
@@ -91,13 +112,20 @@ try {
   assert.equal(await evaluate('document.querySelector("#rows input").value'), '0.25');
   await evaluate(`document.getElementById('undo').click()`);
   assert.equal(await evaluate('document.querySelector("#rows input").value'), '0.5');
+  await evaluate('preview(0)');
+  await waitFor('!audio.paused');
+  await clickRow(0, '停止');
+  const stoppedAt = await evaluate('audio.currentTime');
+  await new Promise(done => setTimeout(done, 200));
+  assert.equal(await evaluate('audio.paused'), true);
+  assert.ok(stoppedAt >= 0.5 && Math.abs(await evaluate('audio.currentTime') - stoppedAt) < 0.02);
   await page('Page.reload');
   await waitFor('document.getElementById("songName")?.value === "確認用の曲"');
   assert.equal(await evaluate('document.getElementById("projects").options.length'), 2);
   assert.equal(await evaluate('document.querySelector("#rows input").value'), '0.5');
   const image = await page('Page.captureScreenshot', { format: 'png' });
   await writeFile(resolve(output, 'pc-editor.png'), Buffer.from(image.data, 'base64'));
-  console.log('Browser checks passed: legacy draft migration, offset undo/redo, song switching, real audio stamping, reload persistence.');
+  console.log('Browser checks passed: millisecond buttons, insert-after-selection and undo/redo, row playback stop without reset, draft migration, stamping and persistence.');
   await call('Browser.close');
 } finally {
   socket?.close(); chrome.kill();

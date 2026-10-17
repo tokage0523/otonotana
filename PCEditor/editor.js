@@ -57,16 +57,22 @@ function render() {
     };
     const buttons = document.createElement('div'); buttons.className = 'actions';
     buttons.append(action('選択', () => { selected = index; highlight(); }),
-      action('今の時刻', () => { selected = index; stamp(false); }),
-      action('−0.1秒', () => adjust(index, -0.1)), action('＋0.1秒', () => adjust(index, 0.1)),
+      action('今の時刻', () => { selected = index; stamp(false); }));
+    for (const step of [0.1, 0.01, 0.001]) {
+      const pair = document.createElement('span'); pair.className = 'timing-step';
+      pair.append(action(`−${step}秒`, () => adjust(index, -step)), action(`＋${step}秒`, () => adjust(index, step)));
+      buttons.append(pair);
+    }
+    buttons.append(
       action('ここから再生', () => preview(index)),
+      action('停止', () => { audio.pause(); highlight(); }),
       action('削除', () => { if (!row.text || confirm('この歌詞の行を削除しますか？')) { checkpoint(); rows.splice(index, 1); selected = Math.min(selected, Math.max(0, rows.length - 1)); persist(); render(); } }));
     el.append(number, seconds, text, buttons); area.append(el);
   }); highlight(); historyControls();
 }
 function adjust(index, delta) {
   if (rows[index].seconds === null) { status('先にこの行の時刻を設定してください。', true); return; }
-  checkpoint(); rows[index].seconds = Math.round(Math.max(0, rows[index].seconds + delta) * 1000) / 1000;
+  checkpoint(); rows[index].seconds = Math.max(0, Math.round(rows[index].seconds * 1000) + Math.round(delta * 1000)) / 1000;
   persist(); render();
 }
 function stamp(advance = true) {
@@ -128,7 +134,15 @@ $('append').onclick = () => {
   checkpoint(); const first = rows.length; rows.push(...$('paste').value.trim().split(/\r?\n/).map(text => ({ seconds: null, text })));
   $('paste').value = ''; selected = first; persist(); render();
 };
-$('blank').onclick = () => { checkpoint(); rows.push({ seconds: null, text: '' }); selected = rows.length - 1; persist(); render(); };
+$('blank').onclick = () => {
+  checkpoint();
+  const index = rows.length ? Math.min(selected + 1, rows.length) : 0;
+  rows.splice(index, 0, { seconds: null, text: '' }); selected = index;
+  persist(); render();
+  const inserted = $('rows').children[index];
+  inserted?.scrollIntoView({ block: 'nearest' });
+  inserted?.querySelector('input[placeholder="（間奏）"]')?.focus({ preventScroll: true });
+};
 $('stamp').onclick = () => stamp();
 let beforeNameEdit, committedNameEdit = false;
 $('songName').onfocus = () => { beforeNameEdit = snapshot(); committedNameEdit = false; };

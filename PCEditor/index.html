@@ -18,6 +18,7 @@
   audio{width:100%;margin-top:16px}label{font-size:14px}.hint{font-size:13px;color:#666b80}.clock{font-size:25px;font-variant-numeric:tabular-nums;font-weight:650;margin:12px 0}
   .file input{position:absolute;width:1px;height:1px;opacity:0}.row{display:grid;grid-template-columns:28px 108px 1fr;gap:8px;align-items:center;padding:12px;border:1px solid #e4e5ef;border-radius:12px;margin-top:10px}
   .row.selected{border-color:#5852be;background:#f8f7ff}.row.active{box-shadow:inset 4px 0 #5852be}.row .actions{grid-column:2/4;display:flex;gap:7px;flex-wrap:wrap}.row button{font-size:12px;padding:7px 9px}.row .number{font-size:13px;color:#767a8c}
+  .timing-step{display:inline-flex;gap:4px}
   .empty{padding:35px 10px;text-align:center;color:#74798e}.status{min-height:25px;margin:14px 0 0;font-size:14px;color:#5852be}.status.error{color:#a02c3a}
   .title{display:flex;justify-content:space-between;align-items:center;gap:12px}#rows{max-height:650px;overflow:auto;padding:3px}#audioName{overflow-wrap:anywhere}
   @media(max-width:750px){main{padding:24px 14px}.grid{grid-template-columns:1fr}.card{padding:18px}h1{font-size:25px}.row{grid-template-columns:24px 94px 1fr}}
@@ -43,7 +44,7 @@
       <h2>2. 歌詞を用意する</h2>
       <label for="paste">歌詞を1行ずつ貼り付ける</label>
       <textarea id="paste" placeholder="最初の一節&#10;次の一節&#10;サビの一節"></textarea>
-      <div class="bar" style="margin-top:12px"><button id="append" class="primary">歌詞の行を追加</button><button id="blank">空行を追加</button></div>
+      <div class="bar" style="margin-top:12px"><button id="append" class="primary">歌詞の行を追加</button><button id="blank">選択行の次に空行を追加</button></div>
       <p class="hint">空行にも時刻を付けると間奏の目印になります。下書きはこのブラウザに自動保存します。</p>
       <label class="file">保存済みの歌詞を開く<input id="lrcFile" type="file" accept=".lrc,.txt,.json"></label>
       <hr style="border:0;border-top:1px solid #ececf3;margin:22px 0">
@@ -57,7 +58,7 @@
       <div class="bar"><button id="stamp" class="primary">選択行に今の時刻 → 次の行</button><button id="undo">元に戻す</button><button id="redo">やり直す</button></div>
       <div class="bar" style="margin-top:12px"><select id="shiftTarget" aria-label="ずらす範囲"><option value="all">歌詞全体</option><option value="selected">選択行から最後まで</option></select><input id="shiftSeconds" type="number" value="0.1" step="0.1" aria-label="ずらす秒数" style="width:95px"><span>秒</span><button id="shift">時刻をまとめてずらす</button></div>
       <p class="hint">正の値で遅く、負の値で早くなります。0秒より前になる行は0秒になります。</p>
-      <p class="hint">行の「選択」で対象を変えられます。「ここから再生」で確認し、秒数を直接入力して微調整。Ctrl＋Enterでも時刻を付けられます。</p>
+      <p class="hint">行の「選択」で対象を変え、空行はその次に追加できます。「ここから再生」と「停止」で確認し、±0.1／0.01／0.001秒で微調整。停止しても再生位置はそのままです。Ctrl＋Enterでも時刻を付けられます。</p>
       <div id="rows"><div class="empty">左側から歌詞を追加してください。</div></div>
     </section>
   </div>

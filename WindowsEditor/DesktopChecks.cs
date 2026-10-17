@@ -49,11 +49,13 @@ internal static class DesktopChecks
             return;
         }
         await Evaluate("document.getElementById('songName').value='保存テスト'; document.getElementById('paste').value='最初の一節\\n次の一節'; document.getElementById('append').click(); document.querySelectorAll('#rows input[type=number]').forEach((e,i)=>{e.value=String(1.25+i);e.dispatchEvent(new Event('change'))}); true");
+        await Evaluate("[...document.querySelector('#rows .row').querySelectorAll('button')].find(b=>b.textContent==='＋0.001秒').click()");
         await Evaluate("document.getElementById('export').onclick()");
         var saved = Path.Combine(root, "Saved", "保存テスト.lrc");
-        if (!File.ReadAllText(saved).Contains("[00:01.250]最初の一節")) throw new Exception("Native LRC save has incorrect content: " + File.ReadAllText(saved));
+        if (!File.ReadAllText(saved).Contains("[00:01.251]最初の一節")) throw new Exception("Native LRC save lost the 0.001 second button adjustment: " + File.ReadAllText(saved));
         if (File.ReadAllBytes(saved).Take(3).SequenceEqual(new byte[] { 239, 187, 191 })) throw new Exception("Unexpected UTF-8 BOM");
         log.Add("PASS native save writes Japanese LRC as UTF-8 without BOM");
+        await Evaluate("[...document.querySelector('#rows .row').querySelectorAll('button')].find(b=>b.textContent==='−0.001秒').click()");
         await Evaluate("document.getElementById('draft').onclick()");
         using (var draft = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "Saved", "保存テスト.json"))))
             if (draft.RootElement.GetProperty("rows").GetArrayLength() != 2) throw new Exception("Native draft export lost rows");
@@ -77,6 +79,16 @@ internal static class DesktopChecks
         await Wait("audio.currentTime>1.6");
         await Evaluate("audio.pause(); document.getElementById('stamp').click(); true");
         await Assert("Number(document.querySelector('#rows input[type=number]').value)>=1.5 && Number(document.querySelector('#rows input[type=number]').value)<3", "lyric stamping uses the native playback clock");
+        await Evaluate("preview(0)");
+        await Wait("!audio.paused");
+        await Evaluate("[...document.querySelector('#rows .row').querySelectorAll('button')].find(b=>b.textContent==='停止').click()");
+        await Wait("audio.paused");
+        await Task.Delay(150);
+        var stoppedAt = (await Evaluate("audio.currentTime")).GetProperty("value").GetDouble();
+        await Task.Delay(250);
+        var stoppedLater = (await Evaluate("audio.currentTime")).GetProperty("value").GetDouble();
+        if (stoppedAt < 1.4 || Math.Abs(stoppedLater - stoppedAt) >= 0.02) throw new Exception("Row stop reset or failed to pause the native playback clock");
+        log.Add("PASS lyric-row stop pauses native playback without resetting position");
         if (File.Exists(Path.Combine(root, "sample.m4a")))
         {
             await Assert("openDesktopAudio('aac')", "native AAC M4A load");

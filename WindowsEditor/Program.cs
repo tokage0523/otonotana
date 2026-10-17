@@ -64,7 +64,7 @@ internal sealed class EditorWindow : Form
         help.DropDownItems.Add("ブラウザー版の下書きを引き継ぐ", null, (_, _) => MessageBox.Show(this,
             "① ブラウザー版で「全下書きを保存」を押します。\n② このアプリで「保存済みの歌詞を開く」を押します。\n③ ①で保存したJSONファイルを選びます。\n\n音楽ファイルはコピーしません。曲を切り替えたら対応する音楽を選んでください。", "下書きの引き継ぎ"));
         help.DropDownItems.Add("このアプリについて", null, (_, _) => MessageBox.Show(this,
-            "音の棚 · 歌詞エディター 0.4.3\n\n下書きはこのPCに自動保存します。\n大切な編集内容は「全下書きを保存」で別途保存できます。\n\nLRCを音楽と一緒にiPhoneへ転送して使います。", "音の棚"));
+            "音の棚 · 歌詞エディター 0.4.4\n\n下書きはこのPCに自動保存します。\n大切な編集内容は「全下書きを保存」で別途保存できます。\n\nLRCを音楽と一緒にiPhoneへ転送して使います。", "音の棚"));
         menus.Items.AddRange([file, help]); menus.Enabled = false;
         MainMenuStrip = menus;
         Controls.Add(browser); Controls.Add(footer); Controls.Add(menus);
@@ -93,7 +93,7 @@ internal sealed class EditorWindow : Form
     {
         try
         {
-            var assets = Path.Combine(dataRoot, "Assets", "0.4.3"); Directory.CreateDirectory(assets);
+            var assets = Path.Combine(dataRoot, "Assets", "0.4.4"); Directory.CreateDirectory(assets);
             foreach (var file in new[] { "index.html", "editor.js", "editor-state.js", "lyrics-core.js" })
                 File.WriteAllText(Path.Combine(assets, file), Resource("EditorAssets." + file), new UTF8Encoding(false));
             var environment = await CoreWebView2Environment.CreateAsync(userDataFolder: Path.Combine(dataRoot, "Profile"));
